@@ -1,3 +1,4 @@
+
 {
   "headlineHub": "مركز العناوين",
   "dashboard": "لوحة التحكم",
@@ -66,5 +67,17 @@
   "userSettings": "إعدادات المستخدم",
   "logout": "تسجيل الخروج",
   "unknown": "غير معروف",
-  "exportData": "تصدير البيانات"
+  "exportData": "تصدير البيانات",
+  "exportSettings": "إعدادات التصدير",
+  "exportSettingsDesc": "قم بتكوين الطريقة التي تريد بها تصدير بيانات العناوين الخاصة بك.",
+  "exportFormat": "صيغة التصدير",
+  "txtExportMode": "وضع تصدير الملف النصي",
+  "txtSingleFile": "ملف واحد (جميع العناوين)",
+  "txtMultipleFiles": "ملفات متعددة (ملف لكل عنوان)",
+  "exportStates": "تضمين الحالات في التصدير",
+  "saveSettings": "حفظ الإعدادات",
+  "settingsSavedTitle": "تم حفظ الإعدادات",
+  "settingsSavedDesc": "تم تحديث إعدادات التصدير الخاصة بك بنجاح.",
+  "comingSoon": "قريباً",
+  "atLeastOneStateRequired": "يجب تحديد حالة واحدة على الأقل للتصدير."
 }

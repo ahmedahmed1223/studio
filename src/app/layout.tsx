@@ -1,13 +1,16 @@
+
 'use client'; // Make this a client component to use the hook
 
+import React, { useEffect } from 'react'; // Import React
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google'; // Using Inter for a modern feel
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { LanguageProvider, useLanguage } from '@/context/language-context'; // Import useLanguage
+import { SettingsProvider } from '@/context/settings-context'; // Import SettingsProvider
 import { Header } from '@/components/layout/header';
 import { cn } from '@/lib/utils';
-import { useEffect } from 'react'; // Import useEffect directly
+
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -52,6 +55,7 @@ export default function RootLayout({
 }>) {
   return (
     <LanguageProvider>
+      <SettingsProvider> {/* Wrap with SettingsProvider */}
         {/* The LanguageProvider now wraps the content directly */}
         {/* We need a client component *inside* the provider to use the hook */}
         {/* We still need the <html> tag */}
@@ -65,6 +69,7 @@ export default function RootLayout({
                 {children}
             </HtmlBody>
         </html>
+      </SettingsProvider>
     </LanguageProvider>
   );
 }

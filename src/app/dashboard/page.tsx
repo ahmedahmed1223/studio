@@ -1,3 +1,4 @@
+
 import { HeadlineTable } from '@/components/headlines/headline-table';
 import { getCategories, getHeadlines } from '@/services/headline';
 import type { HeadlineState, Category } from '@/services/headline';
@@ -25,7 +26,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   // Pass filters to getHeadlines
   const filters = {
-    state: selectedState,
+    states: selectedState ? [selectedState] : undefined, // Use states array
     category: selectedCategory,
   };
 
@@ -67,14 +68,16 @@ async function HeadlineTableWrapper({
   pageSize,
   categories,
 }: {
-  filters: { state?: HeadlineState; category?: string };
+  filters: { states?: HeadlineState[]; category?: string }; // Update filter type
   page: number;
   pageSize: number;
   categories: Category[];
 }) {
   const headlines = await getHeadlines(filters, page, pageSize);
   // TODO: Get total count for pagination from getHeadlines or a separate count function
-  const totalHeadlines = 20; // Placeholder count
+   // Fetch total count based on filters for accurate pagination
+   const allFilteredHeadlines = await getHeadlines(filters, 0, 0); // Fetch all matching headlines
+   const totalHeadlines = allFilteredHeadlines.length;
   const totalPages = Math.ceil(totalHeadlines / pageSize);
 
   return (
@@ -86,3 +89,4 @@ async function HeadlineTableWrapper({
     />
   );
 }
+

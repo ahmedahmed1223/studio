@@ -1,9 +1,11 @@
+
 'use client';
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Languages, AlignRight, AlignLeft, Settings, LogOut, Download } from 'lucide-react'; // Updated icons
+import { Languages, AlignRight, AlignLeft, Settings, LogOut, Download } from 'lucide-react'; // Use AlignLeft/Right
 import { useLanguage } from '@/context/language-context';
+import { useSettings } from '@/context/settings-context'; // Import useSettings
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,9 +14,12 @@ import {
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from 'next/navigation'; // To handle logout redirect
+import { useMemo } from 'react'; // Import useMemo
+
 
 export function Header() {
   const { language, direction, setLanguage, toggleDirection, t } = useLanguage();
+  const { settings } = useSettings(); // Get settings from context
   const router = useRouter();
 
   const handleLanguageChange = (lang: 'en' | 'ar') => {
@@ -27,6 +32,24 @@ export function Header() {
     // Redirect to login page after logout
     // router.push('/login'); // Assuming a login page exists at /login
   };
+
+   // Generate the dynamic export URL based on settings
+   const exportUrl = useMemo(() => {
+       const params = new URLSearchParams();
+       params.set('format', settings.exportFormat);
+       if (settings.exportFormat === 'txt') {
+           params.set('txtMode', settings.txtExportMode);
+       }
+       params.set('states', settings.exportStates.join(','));
+       return `/api/export/headlines?${params.toString()}`;
+   }, [settings]);
+
+  const exportFilename = useMemo(() => {
+      const stateString = settings.exportStates.join('_').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      const extension = settings.exportFormat;
+      return `headlines_${stateString}.${extension}`;
+   }, [settings.exportFormat, settings.exportStates]);
+
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -76,12 +99,12 @@ export function Header() {
                  </Button>
              </DropdownMenuTrigger>
              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => router.push('/settings')}> {/* Assuming /settings page */}
+                <DropdownMenuItem onClick={() => router.push('/settings')}> {/* Navigate to settings page */}
                    <Settings className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
                   <span>{t('settings')}</span>
                 </DropdownMenuItem>
                  <DropdownMenuItem asChild>
-                    <a href="/api/export/headlines" download="headlines.csv"> {/* Link to API route */}
+                    <a href={exportUrl} download={exportFilename}> {/* Use dynamic URL and filename */}
                         <Download className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
                         <span>{t('exportData')}</span>
                     </a>

@@ -1,4 +1,5 @@
 
+
 /**
  * Represents a headline category.
  */
@@ -110,13 +111,13 @@ export async function getCategories(): Promise<Category[]> {
 /**
  * Asynchronously retrieves a list of headlines with filtering and pagination.
  * Simulates API delay.
- * @param filters An object containing optional filters for state and category.
+ * @param filters An object containing optional filters for state(s) and category.
  * @param page The page number to retrieve (1-based).
  * @param pageSize The number of headlines per page.
  * @returns A promise that resolves to an array of Headline objects for the requested page.
  */
 export async function getHeadlines(
-  filters?: { state?: HeadlineState; category?: string },
+  filters?: { states?: HeadlineState[]; category?: string },
   page: number = 1,
   pageSize: number = 10
 ): Promise<Headline[]> {
@@ -125,17 +126,22 @@ export async function getHeadlines(
   let filteredHeadlines = [...mockHeadlines]; // Start with a copy
 
   // Apply filters
-  if (filters?.state) {
-    filteredHeadlines = filteredHeadlines.filter(h => h.state === filters.state);
+  if (filters?.states && filters.states.length > 0) {
+    const stateSet = new Set(filters.states);
+    filteredHeadlines = filteredHeadlines.filter(h => stateSet.has(h.state));
   }
   if (filters?.category) {
     filteredHeadlines = filteredHeadlines.filter(h => h.categories.includes(filters.category!));
   }
 
-  // Apply pagination
-  const startIndex = (page - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const paginatedHeadlines = filteredHeadlines.slice(startIndex, endIndex);
+  // Apply pagination only if page and pageSize are provided and valid
+   let paginatedHeadlines = filteredHeadlines;
+   if (page > 0 && pageSize > 0) {
+       const startIndex = (page - 1) * pageSize;
+       const endIndex = startIndex + pageSize;
+       paginatedHeadlines = filteredHeadlines.slice(startIndex, endIndex);
+   }
+
 
   // TODO: In a real API, you'd also return the total count of filtered items for pagination UI.
   // For now, the caller assumes a fixed total or calculates it based on the full unfiltered list.

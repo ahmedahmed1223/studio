@@ -1,3 +1,4 @@
+
 {
   "headlineHub": "Headline Hub",
   "dashboard": "Dashboard",
@@ -66,5 +67,17 @@
   "userSettings": "User Settings",
   "logout": "Logout",
   "unknown": "Unknown",
-  "exportData": "Export Data"
+  "exportData": "Export Data",
+  "exportSettings": "Export Settings",
+  "exportSettingsDesc": "Configure how you want to export your headline data.",
+  "exportFormat": "Export Format",
+  "txtExportMode": "Text File Export Mode",
+  "txtSingleFile": "Single file (all headlines)",
+  "txtMultipleFiles": "Multiple files (one per headline)",
+  "exportStates": "Include States in Export",
+  "saveSettings": "Save Settings",
+  "settingsSavedTitle": "Settings Saved",
+  "settingsSavedDesc": "Your export settings have been updated.",
+  "comingSoon": "Coming Soon",
+   "atLeastOneStateRequired": "At least one state must be selected for export."
 }

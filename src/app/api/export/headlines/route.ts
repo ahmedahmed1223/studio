@@ -1,6 +1,9 @@
-import { NextResponse } from 'next/server';
+
+import { NextRequest, NextResponse } from 'next/server';
 import { getHeadlines, getCategories } from '@/services/headline'; // Adjust path as needed
-import type { Headline } from '@/services/headline';
+import type { Headline, HeadlineState, Category } from '@/services/headline';
+import { format } from 'date-fns';
+
 
 // Helper function to convert data to CSV format
 function convertToCSV(data: Headline[], categoryMap: Map<string, string>): string {
@@ -18,6 +21,7 @@ function convertToCSV(data: Headline[], categoryMap: Map<string, string>): strin
     'Priority',
     'Display Lines',
     'Publish Date',
+    'Publish Time',
   ];
 
   // Map data to CSV rows
@@ -29,7 +33,8 @@ function convertToCSV(data: Headline[], categoryMap: Map<string, string>): strin
     headline.state,
     headline.priority,
     headline.displayLines,
-    headline.publishDate.toISOString(), // Format date as ISO string
+    format(headline.publishDate, 'yyyy-MM-dd'),
+    format(headline.publishDate, 'HH:mm'),
   ]);
 
   // Combine headers and rows
@@ -39,24 +44,81 @@ function convertToCSV(data: Headline[], categoryMap: Map<string, string>): strin
   ].join('\n');
 }
 
-export async function GET() {
+// Helper function to convert data to TXT format (single file)
+function convertToTxtSingle(data: Headline[], categoryMap: Map<string, string>): string {
+  return data.map(headline => `
+Headline ID: ${headline.id}
+Title: ${headline.mainTitle}
+Subtitle: ${headline.subtitle}
+Categories: ${headline.categories.map(catId => categoryMap.get(catId) || catId).join(', ')}
+State: ${headline.state}
+Priority: ${headline.priority}
+Display Lines: ${headline.displayLines}
+Publish Date: ${format(headline.publishDate, 'yyyy-MM-dd')}
+Publish Time: ${format(headline.publishDate, 'HH:mm')}
+-----------------------------------
+  `).join('\n').trim();
+}
+
+// TODO: Implement convertToTxtMultiple if needed (requires zipping files or similar)
+// function convertToTxtMultiple(data: Headline[], categoryMap: Map<string, string>): ??? {
+//   // This would likely involve creating multiple file contents and potentially zipping them.
+//   // The response format would need careful consideration (e.g., zip file).
+// }
+
+export async function GET(request: NextRequest) {
   try {
-    // Fetch all headlines (no pagination or filtering for export)
-    // Adjust getHeadlines if needed to support fetching all data
-    // This might be inefficient for large datasets. Consider streaming or background jobs.
-    const headlines = await getHeadlines(undefined, 1, 1000); // Fetch up to 1000 headlines
+    const searchParams = request.nextUrl.searchParams;
+    const formatParam = (searchParams.get('format') || 'csv') as 'csv' | 'txt';
+    const txtModeParam = (searchParams.get('txtMode') || 'single') as 'single' | 'multiple';
+    const statesParam = searchParams.get('states'); // Comma-separated list of states
+
+    const exportStates = statesParam
+      ? statesParam.split(',').filter(s => ['Draft', 'In Review', 'Approved', 'Archived'].includes(s)) as HeadlineState[]
+      : ['Approved']; // Default to 'Approved' if not specified or invalid
+
+    if (exportStates.length === 0) {
+      return new NextResponse('No valid states provided for export', { status: 400 });
+    }
+
+
+    // Fetch headlines based on the specified states (no pagination for export)
+    const headlines = await getHeadlines({ states: exportStates }, 0, 0); // Fetch all matching
     const categories = await getCategories();
     const categoryMap = new Map(categories.map(cat => [cat.id, cat.name]));
 
-    // Convert headlines data to CSV format
-    const csvData = convertToCSV(headlines, categoryMap);
+    let responseData: string;
+    let contentType: string;
+    let filename: string;
 
-    // Create a response with CSV data and appropriate headers
-    const response = new NextResponse(csvData, {
+    if (formatParam === 'txt') {
+      if (txtModeParam === 'single') {
+        responseData = convertToTxtSingle(headlines, categoryMap);
+        contentType = 'text/plain; charset=utf-8';
+        filename = `headlines_${exportStates.join('_')}.txt`;
+      } else {
+        // Placeholder for multiple file export (e.g., zip)
+         return new NextResponse('Multiple file TXT export not yet implemented', { status: 501 });
+        // responseData = convertToTxtMultiple(headlines, categoryMap); // Hypothetical
+        // contentType = 'application/zip';
+        // filename = `headlines_${exportStates.join('_')}.zip`;
+      }
+    } else { // Default to CSV
+      responseData = convertToCSV(headlines, categoryMap);
+      contentType = 'text/csv; charset=utf-8';
+      filename = `headlines_${exportStates.join('_')}.csv`;
+    }
+
+    // Ensure filename is safe
+    filename = filename.replace(/[^a-z0-9_.-]/gi, '_');
+
+
+    // Create a response with the data and appropriate headers
+    const response = new NextResponse(responseData, {
       status: 200,
       headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': 'attachment; filename="headlines.csv"', // Suggest filename for download
+        'Content-Type': contentType,
+        'Content-Disposition': `attachment; filename="${filename}"`, // Suggest filename for download
       },
     });
 
@@ -67,3 +129,4 @@ export async function GET() {
     return new NextResponse('Failed to export data', { status: 500 });
   }
 }
+
