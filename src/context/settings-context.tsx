@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { createContext, useState, useContext, useEffect, useCallback, ReactNode } from 'react';
@@ -8,11 +9,20 @@ export type ExportFormat = 'csv' | 'txt';
 export type TxtExportMode = 'single' | 'multiple'; // Note: 'multiple' might not be fully implemented in API yet
 export const ALL_HEADLINE_STATES: HeadlineState[] = ['Draft', 'In Review', 'Approved', 'Archived'];
 
+export type Theme = 'light' | 'dark' | 'custom';
+export type FontSize = 'small' | 'medium' | 'large';
+export type Font = 'Arial' | 'Helvetica' | 'Times New Roman' | 'Open Sans'; // Example font list
+
 
 export interface ExportSettings {
   exportFormat: ExportFormat;
   txtExportMode: TxtExportMode;
   exportStates: HeadlineState[]; // Which headline states to include in the export
+  theme: Theme;
+  background: string; // HSL value for background color
+  foreground: string; // HSL value for text color
+  fontSize: FontSize;
+  font: Font; // Selected font
 }
 
 interface SettingsContextProps {
@@ -26,6 +36,11 @@ const defaultSettings: ExportSettings = {
   exportFormat: 'csv',
   txtExportMode: 'single',
   exportStates: ['Approved'], // Default to exporting only 'Approved' headlines
+  theme: 'light',
+  background: '210 20% 98%', // Light Grey
+  foreground: '210 10% 23%', // Dark Grey
+  fontSize: 'medium',
+  font: 'Arial',
 };
 
 // Helper to load settings from localStorage
@@ -89,3 +104,4 @@ export const useSettings = (): SettingsContextProps => {
   }
   return context;
 };
+

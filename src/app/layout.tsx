@@ -1,4 +1,3 @@
-
 'use client'; // Make this a client component to use the hook
 
 import React, { useEffect } from 'react'; // Import React
@@ -10,6 +9,7 @@ import { LanguageProvider, useLanguage } from '@/context/language-context'; // I
 import { SettingsProvider } from '@/context/settings-context'; // Import SettingsProvider
 import { Header } from '@/components/layout/header';
 import { cn } from '@/lib/utils';
+import { useSettings } from '@/context/settings-context';
 
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
@@ -24,6 +24,7 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 // Inner component to consume context and apply to HTML tag
 function HtmlBody({ children }: { children: React.ReactNode }) {
   const { language, direction } = useLanguage();
+  const { font, theme, background, foreground } = useSettings().settings;
 
   // Apply lang/dir to HTML tag via useEffect, as we can't directly modify it here easily
   // in a Client Component wrapping the entire structure.
@@ -73,3 +74,4 @@ export default function RootLayout({
     </LanguageProvider>
   );
 }
+

@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { useSettings, ExportFormat, TxtExportMode, ALL_HEADLINE_STATES } from "@/context/settings-context";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSettings, ExportFormat, TxtExportMode, ALL_HEADLINE_STATES, Theme, FontSize, Font } from "@/context/settings-context";
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
 import type { HeadlineState, Category } from "@/services/headline";
@@ -79,6 +81,26 @@ export default function SettingsPage() {
        }
    };
 
+    const handleThemeChange = (value: string) => {
+        setSettings({ theme: value as Theme });
+    };
+
+    const handleFontSizeChange = (value: string) => {
+        setSettings({ fontSize: value as FontSize });
+    };
+
+    const handleFontChange = (value: string) => {
+        setSettings({ font: value as Font });
+    };
+
+    const handleBackgroundColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSettings({ background: e.target.value });
+    };
+
+    const handleForegroundColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSettings({ foreground: e.target.value });
+    };
+
   const handleSave = () => {
     // Settings are saved automatically via context/localStorage, but provide feedback
     toast({
@@ -127,6 +149,73 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+       {/* Display Settings Card */}
+        <Card>
+            <CardHeader>
+                <CardTitle>Display Settings</CardTitle>
+                <CardDescription>Customize the look and feel of the application.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {/* Theme */}
+                <div className="space-y-2">
+                    <Label>Theme</Label>
+                    <RadioGroup value={settings.theme} onValueChange={handleThemeChange} className="flex space-x-4">
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="light" id="theme-light" />
+                            <Label htmlFor="theme-light" className="font-normal">Light</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="dark" id="theme-dark" />
+                            <Label htmlFor="theme-dark" className="font-normal">Dark</Label>
+                        </div>
+                    </RadioGroup>
+                </div>
+
+                {/* Font Size */}
+                <div className="space-y-2">
+                    <Label>Font Size</Label>
+                    <RadioGroup value={settings.fontSize} onValueChange={handleFontSizeChange} className="flex space-x-4">
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="small" id="fontSize-small" />
+                            <Label htmlFor="fontSize-small" className="font-normal">Small</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="medium" id="fontSize-medium" />
+                            <Label htmlFor="fontSize-medium" className="font-normal">Medium</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="large" id="fontSize-large" />
+                            <Label htmlFor="fontSize-large" className="font-normal">Large</Label>
+                        </div>
+                    </RadioGroup>
+                </div>
+
+                {/* Font Selection */}
+                <div className="space-y-2">
+                    <Label>Font</Label>
+                    <Select value={settings.font} onValueChange={handleFontChange}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select a font" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Arial">Arial</SelectItem>
+                            <SelectItem value="Helvetica">Helvetica</SelectItem>
+                            <SelectItem value="Times New Roman">Times New Roman</SelectItem>
+                            <SelectItem value="Open Sans">Open Sans</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Custom Colors */}
+                <div className="space-y-2">
+                    <Label>Background Color (HSL)</Label>
+                    <Input type="text" value={settings.background} onChange={handleBackgroundColorChange} />
+                    <Label>Text Color (HSL)</Label>
+                    <Input type="text" value={settings.foreground} onChange={handleForegroundColorChange} />
+                </div>
+            </CardContent>
+        </Card>
 
       {/* Export Settings Card */}
       <Card>
@@ -207,3 +296,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+
