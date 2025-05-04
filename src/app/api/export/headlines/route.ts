@@ -72,20 +72,25 @@ export async function GET(request: NextRequest) {
     const formatParam = (searchParams.get('format') || 'csv') as 'csv' | 'txt';
     const txtModeParam = (searchParams.get('txtMode') || 'single') as 'single' | 'multiple';
     const statesParam = searchParams.get('states'); // Comma-separated list of states
+    const searchParam = searchParams.get('search'); // Get search term if present
 
     const exportStates = statesParam
-      ? statesParam.split(',').filter(s => ['Draft', 'In Review', 'Approved', 'Archived'].includes(s)) as HeadlineState[]
+      ? statesParam.split(',').filter(s => ALL_HEADLINE_STATES.includes(s as HeadlineState)) as HeadlineState[]
       : ['Approved']; // Default to 'Approved' if not specified or invalid
 
     if (exportStates.length === 0) {
       return new NextResponse('No valid states provided for export', { status: 400 });
     }
 
+     // Fetch all headlines matching the specified states and search term (no pagination for export)
+     const filters = {
+       states: exportStates,
+       search: searchParam || undefined, // Pass search term
+     };
+     const { headlines, totalCount } = await getHeadlines(filters, 0, 0); // Fetch all matching
+     const categories = await getCategories();
+     const categoryMap = new Map(categories.map(cat => [cat.id, cat.name]));
 
-    // Fetch headlines based on the specified states (no pagination for export)
-    const headlines = await getHeadlines({ states: exportStates }, 0, 0); // Fetch all matching
-    const categories = await getCategories();
-    const categoryMap = new Map(categories.map(cat => [cat.id, cat.name]));
 
     let responseData: string;
     let contentType: string;
@@ -119,6 +124,8 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `attachment; filename="${filename}"`, // Suggest filename for download
+         // Add cache control headers to prevent caching of dynamic exports
+         'Cache-Control': 'no-store, max-age=0',
       },
     });
 
@@ -130,3 +137,5 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Re-export ALL_HEADLINE_STATES for use in this file
+export const ALL_HEADLINE_STATES: HeadlineState[] = ['Draft', 'In Review', 'Approved', 'Archived'];

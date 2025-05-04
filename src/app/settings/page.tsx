@@ -9,13 +9,45 @@ import { Button } from "@/components/ui/button";
 import { useSettings, ExportFormat, TxtExportMode, ALL_HEADLINE_STATES } from "@/context/settings-context";
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
-import type { HeadlineState } from "@/services/headline";
+import type { HeadlineState, Category } from "@/services/headline";
+import { getCategories } from '@/services/headline'; // Import getCategories
+import { CategoryManager } from "@/components/settings/category-manager"; // Import CategoryManager
+import { useState, useEffect } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
 export default function SettingsPage() {
   const { settings, setSettings } = useSettings();
   const { t } = useLanguage();
   const { toast } = useToast();
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+
+
+   // Fetch categories on mount
+   useEffect(() => {
+       const fetchCategories = async () => {
+           setIsLoadingCategories(true);
+           setCategoryError(null);
+           try {
+               const fetchedCategories = await getCategories();
+               setCategories(fetchedCategories);
+           } catch (error) {
+               console.error("Failed to fetch categories:", error);
+               setCategoryError(t('categoryFetchError')); // Use translation
+               toast({
+                  title: t('error'),
+                  description: t('categoryFetchError'),
+                  variant: 'destructive'
+               });
+           } finally {
+               setIsLoadingCategories(false);
+           }
+       };
+       fetchCategories();
+   }, [t, toast]); // Add t and toast as dependencies
+
 
   const handleFormatChange = (value: string) => {
     setSettings({ exportFormat: value as ExportFormat });
@@ -55,11 +87,48 @@ export default function SettingsPage() {
     });
   };
 
+  // Function to refresh categories list, passed down to CategoryManager
+  const refreshCategories = async () => {
+      setIsLoadingCategories(true);
+      setCategoryError(null);
+      try {
+          const fetchedCategories = await getCategories();
+          setCategories(fetchedCategories);
+      } catch (error) {
+          console.error("Failed to refresh categories:", error);
+          setCategoryError(t('categoryFetchError'));
+      } finally {
+          setIsLoadingCategories(false);
+      }
+  };
+
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">{t('settings')}</h1>
 
+       {/* Category Management Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('manageCategories')}</CardTitle>
+          <CardDescription>{t('manageCategoriesDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingCategories ? (
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-8 w-1/2" />
+              <Skeleton className="h-8 w-3/4" />
+            </div>
+          ) : categoryError ? (
+             <p className="text-destructive">{categoryError}</p>
+          ) : (
+            <CategoryManager categories={categories} onCategoriesUpdate={refreshCategories} />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Export Settings Card */}
       <Card>
         <CardHeader>
           <CardTitle>{t('exportSettings')}</CardTitle>
@@ -134,9 +203,7 @@ export default function SettingsPage() {
          </CardFooter>
       </Card>
 
-      {/* Add more settings cards here as needed */}
 
     </div>
   );
 }
-

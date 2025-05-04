@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
@@ -10,7 +11,8 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import type { Category, HeadlineState } from '@/services/headline';
-import { useLanguage } from '@/context/language-context'; // Import language context
+import { useLanguage } from '@/context/language-context';
+import { useCallback } from 'react';
 
 interface HeadlineFiltersProps {
   categories: Category[];
@@ -22,34 +24,49 @@ export function HeadlineFilters({ categories }: HeadlineFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { t } = useLanguage(); // Get translation function
+  const { t } = useLanguage();
 
   const currentState = searchParams.get('state') ?? '';
   const currentCategory = searchParams.get('category') ?? '';
 
+  // Use useCallback for stable function references
+  const createQueryString = useCallback(
+    (paramsToUpdate: Record<string, string | undefined>) => {
+      const current = new URLSearchParams(Array.from(searchParams.entries()));
+
+      Object.entries(paramsToUpdate).forEach(([name, value]) => {
+        if (value) {
+          current.set(name, value);
+        } else {
+          current.delete(name);
+        }
+      });
+      current.delete('page'); // Always reset page on filter change
+
+      return current.toString();
+    },
+    [searchParams]
+  );
+
   const handleFilterChange = (type: 'state' | 'category', value: string) => {
-    const current = new URLSearchParams(Array.from(searchParams.entries())); // Convert to mutable object
-
-    if (value) {
-      current.set(type, value);
-    } else {
-      current.delete(type);
-    }
-    current.delete('page'); // Reset to first page on filter change
-
-    const search = current.toString();
-    const query = search ? `?${search}` : '';
-
-    router.push(`${pathname}${query}`);
+    const newValue = value === 'all' ? undefined : value;
+    const queryString = createQueryString({ [type]: newValue });
+    router.push(`${pathname}?${queryString}`);
   };
 
   const clearFilters = () => {
-    router.push(pathname); // Navigate to the base path without query params
+     // Keep search query if present, clear state and category
+    const current = new URLSearchParams(Array.from(searchParams.entries()));
+    current.delete('state');
+    current.delete('category');
+    current.delete('page');
+    const queryString = current.toString();
+    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`);
   }
 
   return (
     <div className="flex flex-col sm:flex-row gap-4">
-      <Select value={currentState} onValueChange={(value) => handleFilterChange('state', value === 'all' ? '' : value)}>
+      <Select value={currentState} onValueChange={(value) => handleFilterChange('state', value)}>
         <SelectTrigger className="w-full sm:w-[180px]">
           <SelectValue placeholder={t('filterByState')} />
         </SelectTrigger>
@@ -61,7 +78,7 @@ export function HeadlineFilters({ categories }: HeadlineFiltersProps) {
         </SelectContent>
       </Select>
 
-      <Select value={currentCategory} onValueChange={(value) => handleFilterChange('category', value === 'all' ? '' : value)}>
+      <Select value={currentCategory} onValueChange={(value) => handleFilterChange('category', value)}>
         <SelectTrigger className="w-full sm:w-[180px]">
           <SelectValue placeholder={t('filterByCategory')} />
         </SelectTrigger>

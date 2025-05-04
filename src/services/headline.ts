@@ -84,8 +84,8 @@ let mockHeadlines: Headline[] = Array.from({ length: 25 }, (_, i) => {
 
     return {
         id: `headline-${i + 1}`,
-        mainTitle: `Headline ${i + 1}: Breaking News`,
-        subtitle: `This is a short subtitle explaining more about headline ${i + 1}. It provides context.`,
+        mainTitle: `Headline ${i + 1}: Breaking News about topic ${i}`,
+        subtitle: `This is a short subtitle explaining more about headline ${i + 1}. It provides context for event ${i}.`,
         categories: [mockCategories[categoryIndex].id, ...( i % 5 === 0 && categoryIndex > 0 ? [mockCategories[categoryIndex-1].id] : [])], // Add a second category sometimes
         state: ['Draft', 'In Review', 'Approved', 'Archived'][stateIndex] as HeadlineState,
         priority: ['Normal', 'High'][priorityIndex] as HeadlinePriority,
@@ -95,6 +95,7 @@ let mockHeadlines: Headline[] = Array.from({ length: 25 }, (_, i) => {
 });
 
 let nextHeadlineId = mockHeadlines.length + 1;
+let nextCategoryId = mockCategories.length + 1; // For new categories
 // --- End Mock Data Store ---
 
 
@@ -109,18 +110,36 @@ export async function getCategories(): Promise<Category[]> {
 }
 
 /**
+ * Interface for headline filters.
+ */
+export interface HeadlineFilters {
+  states?: HeadlineState[];
+  category?: string;
+  search?: string;
+}
+
+/**
+ * Interface for the result of getHeadlines.
+ */
+export interface GetHeadlinesResult {
+  headlines: Headline[];
+  totalCount: number;
+}
+
+
+/**
  * Asynchronously retrieves a list of headlines with filtering and pagination.
  * Simulates API delay.
- * @param filters An object containing optional filters for state(s) and category.
- * @param page The page number to retrieve (1-based).
- * @param pageSize The number of headlines per page.
- * @returns A promise that resolves to an array of Headline objects for the requested page.
+ * @param filters An object containing optional filters.
+ * @param page The page number to retrieve (1-based). Set to 0 for all results.
+ * @param pageSize The number of headlines per page. Set to 0 for all results.
+ * @returns A promise that resolves to an object containing the headlines for the page and the total count of filtered headlines.
  */
 export async function getHeadlines(
-  filters?: { states?: HeadlineState[]; category?: string },
+  filters?: HeadlineFilters,
   page: number = 1,
   pageSize: number = 10
-): Promise<Headline[]> {
+): Promise<GetHeadlinesResult> {
   await new Promise(resolve => setTimeout(resolve, 150)); // Simulate network delay
 
   let filteredHeadlines = [...mockHeadlines]; // Start with a copy
@@ -133,8 +152,18 @@ export async function getHeadlines(
   if (filters?.category) {
     filteredHeadlines = filteredHeadlines.filter(h => h.categories.includes(filters.category!));
   }
+   if (filters?.search) {
+       const searchTerm = filters.search.toLowerCase();
+       filteredHeadlines = filteredHeadlines.filter(h =>
+           h.mainTitle.toLowerCase().includes(searchTerm) ||
+           h.subtitle.toLowerCase().includes(searchTerm)
+       );
+   }
 
-  // Apply pagination only if page and pageSize are provided and valid
+   // Get total count *after* filtering
+   const totalCount = filteredHeadlines.length;
+
+  // Apply pagination only if page and pageSize are positive
    let paginatedHeadlines = filteredHeadlines;
    if (page > 0 && pageSize > 0) {
        const startIndex = (page - 1) * pageSize;
@@ -142,11 +171,10 @@ export async function getHeadlines(
        paginatedHeadlines = filteredHeadlines.slice(startIndex, endIndex);
    }
 
-
-  // TODO: In a real API, you'd also return the total count of filtered items for pagination UI.
-  // For now, the caller assumes a fixed total or calculates it based on the full unfiltered list.
-
-  return paginatedHeadlines;
+  return {
+      headlines: paginatedHeadlines,
+      totalCount: totalCount,
+  };
 }
 
 
@@ -225,15 +253,16 @@ export async function deleteHeadline(id: string): Promise<void> {
  */
 export async function createCategory(name: string): Promise<Category> {
      await new Promise(resolve => setTimeout(resolve, 50));
-     const newId = name.toLowerCase().replace(/\s+/g, '-'); // Simple ID generation
-     // Check if ID already exists, handle collision if necessary in a real app
-     if (mockCategories.some(cat => cat.id === newId)) {
-         throw new Error(`Category with derived ID ${newId} already exists.`);
+     // More robust ID generation (simple counter for mock)
+     const newId = `category-${nextCategoryId++}`;
+     // Check if name already exists (case-insensitive)
+     if (mockCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
+         throw new Error(`Category with name "${name}" already exists.`);
      }
      const newCategory: Category = { id: newId, name };
      mockCategories.push(newCategory);
      console.log("Created category:", newCategory);
-     return { ...newCategory };
+     return { ...newCategory }; // Return a copy
  }
 
 /**
@@ -248,21 +277,36 @@ export async function updateCategory(id: string, name: string): Promise<void> {
      if (index === -1) {
          throw new Error(`Category with ID ${id} not found.`);
      }
+     // Check if new name conflicts with another existing category (case-insensitive)
+     if (mockCategories.some(cat => cat.id !== id && cat.name.toLowerCase() === name.toLowerCase())) {
+        throw new Error(`Another category with name "${name}" already exists.`);
+     }
      mockCategories[index].name = name;
       console.log("Updated category:", mockCategories[index]);
      return;
  }
 
 /**
- * Asynchronously deletes a category.
- * Note: This mock implementation does not handle removing the category from existing headlines.
+ * Asynchronously deletes a category. Also removes the category from all headlines.
  * @param id The ID of the category to delete.
  * @returns A promise that resolves when the category is deleted.
  */
 export async function deleteCategory(id: string): Promise<void> {
-     await new Promise(resolve => setTimeout(resolve, 50));
+     await new Promise(resolve => setTimeout(resolve, 100)); // Slightly longer delay for cascade
+     const initialLength = mockCategories.length;
      mockCategories = mockCategories.filter(cat => cat.id !== id);
-      console.log("Deleted category with ID:", id);
-     // In a real app, you'd need a strategy for headlines associated with the deleted category.
+
+     if (mockCategories.length === initialLength) {
+         // Optional: Consider if not finding the category should be an error
+         console.warn(`Category with ID ${id} not found for deletion.`);
+     } else {
+        // Remove the category ID from all headlines that contain it
+        mockHeadlines = mockHeadlines.map(headline => ({
+            ...headline,
+            categories: headline.categories.filter(catId => catId !== id),
+        }));
+        console.log(`Deleted category with ID: ${id} and removed from headlines.`);
+     }
+
      return;
  }
