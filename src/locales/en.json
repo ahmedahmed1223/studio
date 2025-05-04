@@ -65,5 +65,6 @@
   "toggleDirection": "Toggle Text Direction",
   "userSettings": "User Settings",
   "logout": "Logout",
-  "unknown": "Unknown"
+  "unknown": "Unknown",
+  "exportData": "Export Data"
 }

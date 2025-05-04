@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Languages, AlignRight, AlignLeft, Settings, LogOut } from 'lucide-react'; // Updated icons
+import { Languages, AlignRight, AlignLeft, Settings, LogOut, Download } from 'lucide-react'; // Updated icons
 import { useLanguage } from '@/context/language-context';
 import {
   DropdownMenu,
@@ -80,6 +80,12 @@ export function Header() {
                    <Settings className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
                   <span>{t('settings')}</span>
                 </DropdownMenuItem>
+                 <DropdownMenuItem asChild>
+                    <a href="/api/export/headlines" download="headlines.csv"> {/* Link to API route */}
+                        <Download className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
+                        <span>{t('exportData')}</span>
+                    </a>
+                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4 text-destructive rtl:ml-2 rtl:mr-0" />

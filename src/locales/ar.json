@@ -65,5 +65,6 @@
   "toggleDirection": "تبديل اتجاه النص",
   "userSettings": "إعدادات المستخدم",
   "logout": "تسجيل الخروج",
-  "unknown": "غير معروف"
+  "unknown": "غير معروف",
+  "exportData": "تصدير البيانات"
 }
