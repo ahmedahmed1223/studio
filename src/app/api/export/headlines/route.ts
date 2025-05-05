@@ -1,18 +1,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getHeadlines, getCategories } from '@/services/headline'; // Adjust path as needed
-import type { Headline, HeadlineState, Category, HeadlineFilters } from '@/services/headline'; // Import HeadlineFilters
+import type { Headline, HeadlineState, Category, HeadlineFilters, GetHeadlinesResult } from '@/services/headline'; // Import HeadlineFilters & GetHeadlinesResult
 import { format } from 'date-fns';
 
 /**
- * Converts an array of Headline objects to a CSV formatted string.
+ * Converts an array of Headline objects (with Date objects) to a CSV formatted string.
  * Maps category IDs to names using the provided categoryMap.
  *
- * @param data - Array of Headline objects to convert.
+ * @param data - Array of Headline objects (with publishDate as Date) to convert.
  * @param categoryMap - A Map where keys are category IDs and values are category names.
  * @returns A string containing the CSV data, including headers. Returns an empty string if data is empty.
  */
-function convertToCSV(data: Headline[], categoryMap: Map<string, string>): string {
+function convertToCSV(data: Array<Headline & { publishDate: Date }>, categoryMap: Map<string, string>): string {
   if (!data || data.length === 0) {
     return '';
   }
@@ -28,11 +28,11 @@ function convertToCSV(data: Headline[], categoryMap: Map<string, string>): strin
     'Display Lines',
     'Publish Date',
     'Publish Time',
-    'Is Breaking', // Added header
-    'Order', // Added header
+    'Is Breaking',
+    'Order',
   ];
 
-  // Map data to CSV rows
+  // Map data to CSV rows, formatting the Date object
   const rows = data.map(headline => [
     headline.id,
     `"${headline.mainTitle.replace(/"/g, '""')}"`, // Escape double quotes
@@ -41,10 +41,10 @@ function convertToCSV(data: Headline[], categoryMap: Map<string, string>): strin
     headline.state,
     headline.priority,
     headline.displayLines,
-    format(headline.publishDate, 'yyyy-MM-dd'),
-    format(headline.publishDate, 'HH:mm'),
-    headline.isBreaking ? 'Yes' : 'No', // Added value
-    headline.order, // Added value
+    format(headline.publishDate, 'yyyy-MM-dd'), // Format Date object
+    format(headline.publishDate, 'HH:mm'),     // Format Date object
+    headline.isBreaking ? 'Yes' : 'No',
+    headline.order,
   ]);
 
   // Combine headers and rows
@@ -55,15 +55,15 @@ function convertToCSV(data: Headline[], categoryMap: Map<string, string>): strin
 }
 
 /**
- * Converts an array of Headline objects to a plain text formatted string (single file).
+ * Converts an array of Headline objects (with Date objects) to a plain text formatted string (single file).
  * Each headline's details are separated by a line of dashes.
  * Maps category IDs to names using the provided categoryMap.
  *
- * @param data - Array of Headline objects to convert.
+ * @param data - Array of Headline objects (with publishDate as Date) to convert.
  * @param categoryMap - A Map where keys are category IDs and values are category names.
  * @returns A string containing the formatted text data for all headlines.
  */
-function convertToTxtSingle(data: Headline[], categoryMap: Map<string, string>): string {
+function convertToTxtSingle(data: Array<Headline & { publishDate: Date }>, categoryMap: Map<string, string>): string {
   return data.map(headline => `
 Headline ID: ${headline.id}
 Title: ${headline.mainTitle}
@@ -127,8 +127,8 @@ export async function GET(request: NextRequest) {
      };
 
      // Fetch all matching headlines (no pagination needed for export).
-     // Fetch categories to map IDs to names.
-     const { headlines } = await getHeadlines(filters, 0, 0); // page=0, pageSize=0 means fetch all
+     // getHeadlines now returns headlines with Date objects.
+     const { headlines }: GetHeadlinesResult = await getHeadlines(filters, 0, 0); // page=0, pageSize=0 means fetch all
      const categories = await getCategories();
      const categoryMap = new Map(categories.map(cat => [cat.id, cat.name]));
 
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
         ? `headlines_selection_${timestamp}`
         : `headlines_${(exportStates || ['all']).join('_')}_${timestamp}`;
 
-    // Generate response based on format and txtMode.
+    // Generate response based on format and txtMode. Pass headlines with Date objects.
     if (formatParam === 'txt') {
       if (txtModeParam === 'single') {
         responseData = convertToTxtSingle(headlines, categoryMap);
@@ -188,4 +188,5 @@ export async function GET(request: NextRequest) {
  * Array containing all possible headline states. Used for validation.
  */
 export const ALL_HEADLINE_STATES: HeadlineState[] = ['Draft', 'In Review', 'Approved', 'Archived'];
+
 

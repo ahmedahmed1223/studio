@@ -1,8 +1,8 @@
 
+import React, { Suspense } from 'react'; // Import React
 import { HeadlineTable } from '@/components/headlines/headline-table';
-import { getCategories, getHeadlines, HeadlineFilters as HeadlineFilterType } from '@/services/headline';
-import type { HeadlineState, Category } from '@/services/headline';
-import { Suspense } from 'react';
+import { getCategories, getHeadlines, HeadlineFilters as HeadlineFilterType, GetHeadlinesResult } from '@/services/headline'; // Use GetHeadlinesResult
+import type { HeadlineState, Category, Headline } from '@/services/headline';
 import { HeadlineTableSkeleton } from '@/components/headlines/headline-table-skeleton';
 import { HeadlineFilters } from '@/components/headlines/headline-filters';
 import { CreateHeadlineButton } from '@/components/headlines/create-headline-button';
@@ -14,7 +14,7 @@ interface BreakingNewsPageProps {
   searchParams: {
     page?: string;
     state?: HeadlineState;
-    category?: string; // Category filter might still be relevant
+    category?: string;
     search?: string;
   };
 }
@@ -24,7 +24,7 @@ export default async function BreakingNewsPage({ searchParams }: BreakingNewsPag
   const selectedState = searchParams.state;
   const selectedCategory = searchParams.category;
   const searchTerm = searchParams.search;
-  const pageSize = 10; // Or a different page size for breaking news?
+  const pageSize = 10;
 
   const categories = await getCategories();
 
@@ -43,7 +43,6 @@ export default async function BreakingNewsPage({ searchParams }: BreakingNewsPag
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h1 className="text-3xl font-bold tracking-tight">Breaking News</h1>
-        {/* Pass isBreaking=true to ensure new headlines are marked as breaking */}
         <CreateHeadlineButton categories={categories} isBreaking={true} />
       </div>
 
@@ -52,7 +51,6 @@ export default async function BreakingNewsPage({ searchParams }: BreakingNewsPag
           <CardTitle>Filter &amp; Search Breaking News</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-           {/* Filters might need adjustment if some filters aren't relevant for breaking news */}
            <HeadlineFilters categories={categories} />
            <SearchHeadlineInput />
         </CardContent>
@@ -70,7 +68,7 @@ export default async function BreakingNewsPage({ searchParams }: BreakingNewsPag
   );
 }
 
-// Reusable helper component for fetching and displaying the table
+// Helper component to handle async data fetching for the table
 async function HeadlineTableWrapper({
   filters,
   page,
@@ -82,12 +80,13 @@ async function HeadlineTableWrapper({
   pageSize: number;
   categories: Category[];
 }) {
-  const { headlines, totalCount } = await getHeadlines(filters, page, pageSize);
+  // getHeadlines now returns headlines with Date objects
+  const { headlines, totalCount }: GetHeadlinesResult = await getHeadlines(filters, page, pageSize);
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
     <HeadlineTable
-      headlines={headlines}
+      headlines={headlines} // Pass headlines with Date objects
       categories={categories}
       currentPage={page}
       totalPages={totalPages}
@@ -95,3 +94,4 @@ async function HeadlineTableWrapper({
     />
   );
 }
+

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; // Import React explicitly
 import {
   Dialog,
   DialogContent,
@@ -56,23 +56,23 @@ const RichTextEditor = ({ value, onChange, ...props }: { value: string; onChange
 interface HeadlineEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  headline?: Headline | null; // Optional: Pass headline for editing
+  headline?: (Headline & { publishDate: Date }) | null; // Expect Date object for editing
   categories: Category[];
   isBreaking?: boolean; // Optional: Default value for the breaking news checkbox
 }
 
-// Add isBreaking to the schema
+// Zod schema expects Date object for publishDate
 const headlineSchema = z.object({
   mainTitle: z.string().min(1, { message: "Main title is required" }),
-  subtitle: z.string().optional(), // Consider making subtitle rich text too if needed
-  content: z.string().optional(), // Field for rich text content
+  subtitle: z.string().optional(),
+  content: z.string().optional(),
   categoryIds: z.array(z.string()).min(1, { message: "At least one category is required" }),
   state: z.enum(['Draft', 'In Review', 'Approved', 'Archived']),
   priority: z.enum(['High', 'Normal']),
   displayLines: z.number().min(1).max(3),
   publishDate: z.date({ required_error: "Publish date is required" }),
-  publishTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:MM)" }).optional(),
-  isBreaking: z.boolean().default(false), // Add isBreaking field
+  publishTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:MM)" }), // Make time required
+  isBreaking: z.boolean().default(false),
 });
 
 type HeadlineFormData = z.infer<typeof headlineSchema>;
@@ -81,7 +81,16 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
   const isEditing = !!headline;
   const { toast } = useToast();
   const { t } = useLanguage();
-  const [selectedTime, setSelectedTime] = useState<string>(headline ? format(headline.publishDate, 'HH:mm') : format(new Date(), 'HH:mm'));
+
+  // Function to get default date/time values
+  const getDefaultDateTime = (): { date: Date; time: string } => {
+      const date = headline?.publishDate ? new Date(headline.publishDate) : new Date();
+      // Ensure date is valid before formatting
+      const time = !isNaN(date.getTime()) ? format(date, 'HH:mm') : format(new Date(), 'HH:mm');
+      return { date: !isNaN(date.getTime()) ? date : new Date(), time };
+  };
+
+  const [selectedTime, setSelectedTime] = useState<string>(getDefaultDateTime().time);
 
 
   const {
@@ -92,6 +101,7 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
     reset,
     formState: { errors, isSubmitting },
     setValue,
+    getValues,
   } = useForm<HeadlineFormData>({
     resolver: zodResolver(headlineSchema),
     defaultValues: {
@@ -102,19 +112,19 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
       state: headline?.state || 'Draft',
       priority: headline?.priority || 'Normal',
       displayLines: headline?.displayLines || 2,
-      publishDate: headline?.publishDate || new Date(),
-      publishTime: headline ? format(headline.publishDate, 'HH:mm') : format(new Date(), 'HH:mm'),
-      isBreaking: headline?.isBreaking ?? initialIsBreaking, // Use provided initial value or default
+      publishDate: getDefaultDateTime().date, // Use function for default date
+      publishTime: getDefaultDateTime().time, // Use function for default time
+      isBreaking: headline?.isBreaking ?? initialIsBreaking,
     },
   });
 
    // Watch form values for preview
   const watchedValues = watch();
 
-  // Reset form when modal closes or headline changes
+  // Reset form when modal opens or headline/initialIsBreaking changes
   useEffect(() => {
     if (isOpen) {
-        const defaultTime = headline ? format(headline.publishDate, 'HH:mm') : format(new Date(), 'HH:mm');
+        const { date: defaultDate, time: defaultTime } = getDefaultDateTime();
         reset({
             mainTitle: headline?.mainTitle || '',
             subtitle: headline?.subtitle || '',
@@ -123,39 +133,48 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
             state: headline?.state || 'Draft',
             priority: headline?.priority || 'Normal',
             displayLines: headline?.displayLines || 2,
-            publishDate: headline?.publishDate || new Date(),
-            publishTime: defaultTime,
-            isBreaking: headline?.isBreaking ?? initialIsBreaking, // Reset isBreaking
+            publishDate: defaultDate, // Use Date object
+            publishTime: defaultTime, // Use HH:mm string
+            isBreaking: headline?.isBreaking ?? initialIsBreaking,
         });
-        setSelectedTime(defaultTime);
+        setSelectedTime(defaultTime); // Also reset local time state
     }
   }, [isOpen, headline, reset, initialIsBreaking]);
 
 
   const onSubmit = async (data: HeadlineFormData) => {
     try {
-      // Combine date and time
-      const [hours, minutes] = (data.publishTime || selectedTime).split(':').map(Number);
+      // Combine date and time into a single Date object
       const combinedDateTime = new Date(data.publishDate);
-      combinedDateTime.setHours(hours, minutes, 0, 0);
+      const [hours, minutes] = (data.publishTime).split(':').map(Number);
+       if (!isNaN(hours) && !isNaN(minutes)) {
+         combinedDateTime.setHours(hours, minutes, 0, 0);
+       } else {
+          // Handle invalid time format if needed, though zod should prevent this
+          console.error("Invalid time format submitted:", data.publishTime);
+          toast({ title: t('error'), description: "Invalid time format.", variant: "destructive" });
+          return;
+       }
 
+      // Data to send to the action (expects Date object for publishDate)
       const headlineData = {
           mainTitle: data.mainTitle,
           subtitle: data.subtitle || '',
-          // Add content: data.content || '', // Include rich text content
+          // content: data.content || '', // Include rich text content if editor implemented
           categories: data.categoryIds,
           state: data.state,
           priority: data.priority,
           displayLines: data.displayLines,
-          publishDate: combinedDateTime,
-          isBreaking: data.isBreaking, // Include isBreaking
+          publishDate: combinedDateTime, // Pass Date object
+          isBreaking: data.isBreaking,
       };
 
       if (isEditing && headline?.id) {
+        // Pass data conforming to HeadlineUpdateData (which includes Date for publishDate)
         await updateHeadlineAction(headline.id, headlineData);
         toast({ title: t('headlineUpdatedTitle'), description: t('headlineUpdatedDesc') });
       } else {
-        // Pass the complete data including isBreaking
+        // Pass data conforming to HeadlineCreateData (which includes Date for publishDate)
         await createHeadlineAction(headlineData);
         toast({ title: t('headlineCreatedTitle'), description: t('headlineCreatedDesc') });
       }
@@ -164,7 +183,7 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
       console.error("Error saving headline:", error);
       toast({
         title: t('error'),
-        description: t('headlineSaveError'),
+        description: (error as Error).message || t('headlineSaveError'), // Show specific error message if available
         variant: "destructive",
       });
     }
@@ -173,9 +192,22 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
    // Function to handle time change
   const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const timeValue = e.target.value;
-    setValue('publishTime', timeValue, { shouldValidate: true });
-    setSelectedTime(timeValue);
+    setValue('publishTime', timeValue, { shouldValidate: true }); // Update form state
+    setSelectedTime(timeValue); // Update local state for input control
   };
+
+  // Helper to combine date and time for preview
+   const getPreviewDate = () => {
+       const date = getValues('publishDate');
+       const time = getValues('publishTime');
+       if (!date || !time) return new Date();
+       const combined = new Date(date);
+        const [hours, minutes] = time.split(':').map(Number);
+         if (!isNaN(hours) && !isNaN(minutes)) {
+             combined.setHours(hours, minutes, 0, 0);
+         }
+       return combined;
+   };
 
 
   return (
@@ -200,6 +232,7 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
           <div>
             <Label htmlFor="subtitle">{t('subtitle')} <span className="text-muted-foreground">({t('optional')})</span></Label>
             <Textarea id="subtitle" {...register('subtitle')} />
+            {errors.subtitle && <p className="text-sm text-destructive mt-1">{errors.subtitle.message}</p>}
           </div>
 
            {/* Rich Text Editor Placeholder */}
@@ -229,7 +262,6 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
                render={({ field }) => (
                  <div className="space-y-2 mt-1 border p-3 rounded-md max-h-32 overflow-y-auto">
                    {categories
-                     .filter(cat => cat.id !== 'breaking') // Exclude 'breaking' from manual selection if it's automatically handled
                      .map((category) => (
                      <div key={category.id} className="flex items-center space-x-2 space-x-reverse">
                        <Checkbox
@@ -360,7 +392,10 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
                                        )}
                                    >
                                        <CalendarIcon className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
-                                       {field.value ? format(field.value, "PPP") : <span>{t('pickADate')}</span>}
+                                       {/* Ensure field.value is a Date before formatting */}
+                                       {field.value instanceof Date && !isNaN(field.value.getTime())
+                                            ? format(field.value, "PPP")
+                                            : <span>{t('pickADate')}</span>}
                                    </Button>
                                </PopoverTrigger>
                                <PopoverContent className="w-auto p-0">
@@ -380,11 +415,12 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
                     <Label htmlFor="publishTime">{t('publishTime')}</Label>
                     <div className="relative">
                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground rtl:right-3 rtl:left-auto" />
+                       {/* Use controlled input with local state `selectedTime` */}
                        <Input
                            id="publishTime"
                            type="time"
-                           value={selectedTime}
-                           onChange={handleTimeChange}
+                           value={selectedTime} // Controlled by local state
+                           onChange={handleTimeChange} // Updates both local and form state
                            className="pl-10 rtl:pr-10 rtl:pl-3"
                            aria-invalid={errors.publishTime ? "true" : "false"}
                         />
@@ -412,8 +448,9 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
                subtitle={watchedValues.subtitle || ''}
                displayLines={watchedValues.displayLines || 2}
                isBreaking={watchedValues.isBreaking} // Pass breaking status to preview
+               publishDate={getPreviewDate()} // Pass combined date for preview
             />
-             {/* Add preview for rich text content here if needed */}
+             {/* Optional: Add preview for rich text content here if needed */}
              {/* <div className="prose dark:prose-invert max-w-none">
                 <div dangerouslySetInnerHTML={{ __html: watchedValues.content || '<p>Content preview...</p>' }} />
              </div> */}
@@ -422,3 +459,4 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isB
     </Dialog>
   );
 }
+

@@ -1,8 +1,8 @@
 
+import React, { Suspense } from 'react'; // Import React
 import { HeadlineTable } from '@/components/headlines/headline-table';
-import { getCategories, getHeadlines, HeadlineFilters as HeadlineFilterType } from '@/services/headline';
-import type { HeadlineState, Category } from '@/services/headline';
-import { Suspense } from 'react';
+import { getCategories, getHeadlines, HeadlineFilters as HeadlineFilterType, GetHeadlinesResult } from '@/services/headline'; // Use GetHeadlinesResult
+import type { HeadlineState, Category, Headline } from '@/services/headline';
 import { HeadlineTableSkeleton } from '@/components/headlines/headline-table-skeleton';
 import { HeadlineFilters } from '@/components/headlines/headline-filters';
 import { CreateHeadlineButton } from '@/components/headlines/create-headline-button';
@@ -41,7 +41,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        {/* Updated title to reflect regular news */}
         <h1 className="text-3xl font-bold tracking-tight">Headlines Dashboard</h1>
         <CreateHeadlineButton categories={categories} />
       </div>
@@ -80,15 +79,17 @@ async function HeadlineTableWrapper({
   pageSize: number;
   categories: Category[];
 }) {
-  const { headlines, totalCount } = await getHeadlines(filters, page, pageSize);
+  // getHeadlines now returns headlines with Date objects
+  const { headlines, totalCount }: GetHeadlinesResult = await getHeadlines(filters, page, pageSize);
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
     <HeadlineTable
-      headlines={headlines}
+      headlines={headlines} // Pass headlines with Date objects
       categories={categories}
       currentPage={page}
       totalPages={totalPages}
     />
   );
 }
+

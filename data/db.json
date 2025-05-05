@@ -1,0 +1,31 @@
+{
+  "categories": [
+    {
+      "id": "tech",
+      "name": "Technology"
+    },
+    {
+      "id": "sports",
+      "name": "Sports"
+    },
+    {
+      "id": "business",
+      "name": "Business"
+    },
+    {
+      "id": "world",
+      "name": "World News"
+    },
+    {
+      "id": "local",
+      "name": "Local Events"
+    },
+    {
+      "id": "breaking",
+      "name": "Breaking News"
+    }
+  ],
+  "headlines": [],
+  "nextHeadlineId": 1,
+  "nextCategoryId": 7
+}
