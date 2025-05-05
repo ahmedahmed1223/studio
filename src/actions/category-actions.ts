@@ -2,14 +2,38 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createCategory, updateCategory, deleteCategory } from '@/services/headline';
+import { createCategory, updateCategory, deleteCategory, getCategories } from '@/services/headline'; // Import getCategories
+import type { Category } from '@/services/headline'; // Import Category type
 import { z } from 'zod';
+
+/**
+ * @fileoverview Server actions for managing categories.
+ * Includes actions for creating, updating, deleting, and fetching categories.
+ */
+
 
 /**
  * Zod schema for validating category names.
  * Ensures the name is a non-empty string with a maximum length of 50 characters.
  */
 const categoryNameSchema = z.string().min(1, { message: "Category name is required" }).max(50, { message: "Category name cannot exceed 50 characters" });
+
+/**
+ * Server action to fetch all categories.
+ * Calls the `getCategories` service function.
+ *
+ * @returns An object indicating success or failure, including the list of categories or error messages.
+ */
+export async function getCategoriesAction(): Promise<{ success: boolean; categories?: Category[]; errors?: string[] }> {
+    try {
+        const categories = await getCategories();
+        return { success: true, categories: categories };
+    } catch (error: any) {
+        console.error('Failed to fetch categories:', error);
+        return { success: false, errors: [error.message || 'Failed to fetch categories.'] };
+    }
+}
+
 
 /**
  * Server action to create a new category.
@@ -19,7 +43,7 @@ const categoryNameSchema = z.string().min(1, { message: "Category name is requir
  * @param name - The name of the new category.
  * @returns An object indicating success or failure, including potential validation errors or the new category object.
  */
-export async function createCategoryAction(name: string) {
+export async function createCategoryAction(name: string): Promise<{ success: boolean; category?: Category; errors?: string[] }> {
   const validationResult = categoryNameSchema.safeParse(name);
   if (!validationResult.success) {
     console.error("Validation failed:", validationResult.error.flatten());
@@ -47,7 +71,7 @@ export async function createCategoryAction(name: string) {
  * @param name - The new name for the category.
  * @returns An object indicating success or failure, including potential validation errors.
  */
-export async function updateCategoryAction(id: string, name: string) {
+export async function updateCategoryAction(id: string, name: string): Promise<{ success: boolean; errors?: string[] }> {
   // Validate ID and name
   if (!id || typeof id !== 'string') {
     return { success: false, errors: ['Invalid category ID provided.'] };
@@ -79,7 +103,7 @@ export async function updateCategoryAction(id: string, name: string) {
  * @param id - The ID of the category to delete.
  * @returns An object indicating success or failure, including potential errors.
  */
-export async function deleteCategoryAction(id: string) {
+export async function deleteCategoryAction(id: string): Promise<{ success: boolean; errors?: string[] }> {
   if (!id || typeof id !== 'string') {
      return { success: false, errors: ['Invalid category ID provided.'] };
   }
@@ -95,4 +119,3 @@ export async function deleteCategoryAction(id: string) {
      return { success: false, errors: [error.message || 'Failed to delete category.'] };
   }
 }
-

@@ -3,10 +3,9 @@
  * @fileoverview This module simulates a backend service for managing headlines and categories.
  * It uses a local JSON file (`data/db.json`) to persist data across server restarts.
  * Simulates network delays using `setTimeout`.
+ * NOTE: File system operations ('fs', 'path') are used only within functions that modify data (create, update, delete, reorder)
+ * to ensure they are only executed on the server side and not bundled for the client.
  */
-
-import fs from 'fs';
-import path from 'path';
 
 // --- Type Definitions ---
 
@@ -91,9 +90,6 @@ export interface Headline {
 
 // --- Data Persistence Setup ---
 
-const dataDir = path.resolve(process.cwd(), 'data');
-const dataFilePath = path.join(dataDir, 'db.json');
-
 interface DbData {
   headlines: Headline[];
   categories: Category[];
@@ -101,12 +97,7 @@ interface DbData {
   nextCategoryId: number;
 }
 
-let dbData: DbData = {
-    headlines: [],
-    categories: [],
-    nextHeadlineId: 1,
-    nextCategoryId: 1,
-};
+let inMemoryDbData: DbData | null = null; // Cache data in memory
 
 // Function to generate initial mock data if file doesn't exist
 function generateInitialData(): DbData {
@@ -158,45 +149,62 @@ function generateInitialData(): DbData {
 }
 
 
-// Function to load data from JSON file
-function loadData(): void {
-  try {
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir);
-      console.log(`[Service] Data directory created at ${dataDir}`);
+// Helper function to read the database file (SERVER-SIDE ONLY)
+async function readDb(): Promise<DbData> {
+    if (inMemoryDbData) {
+        // console.log('[Service] Using in-memory cache');
+        return inMemoryDbData;
     }
 
-    if (fs.existsSync(dataFilePath)) {
-      const fileContent = fs.readFileSync(dataFilePath, 'utf-8');
-      dbData = JSON.parse(fileContent);
-      // Ensure date strings are converted back to Date objects if needed elsewhere,
-      // but keep as string for the service functions dealing with dbData directly.
-      console.log(`[Service] Data loaded successfully from ${dataFilePath}`);
-    } else {
-      console.log(`[Service] Data file not found at ${dataFilePath}. Generating initial data.`);
-      dbData = generateInitialData();
-      saveData(); // Save the initial data
+    // Dynamically import fs and path only when needed on the server
+    const fs = await import('fs');
+    const path = await import('path');
+    const dataDir = path.resolve(process.cwd(), 'data');
+    const dataFilePath = path.join(dataDir, 'db.json');
+
+    try {
+        if (!fs.existsSync(dataDir)) {
+          fs.mkdirSync(dataDir);
+          console.log(`[Service] Data directory created at ${dataDir}`);
+        }
+
+        if (fs.existsSync(dataFilePath)) {
+          const fileContent = fs.readFileSync(dataFilePath, 'utf-8');
+          inMemoryDbData = JSON.parse(fileContent);
+          console.log(`[Service] Data loaded successfully from ${dataFilePath}`);
+        } else {
+          console.log(`[Service] Data file not found at ${dataFilePath}. Generating initial data.`);
+          inMemoryDbData = generateInitialData();
+          await writeDb(inMemoryDbData); // Save the initial data
+        }
+    } catch (error) {
+        console.error('[Service] Error loading or generating data:', error);
+        // Fallback to in-memory initial data if loading/saving fails critically
+        inMemoryDbData = generateInitialData();
     }
-  } catch (error) {
-    console.error('[Service] Error loading or generating data:', error);
-    // Fallback to in-memory initial data if loading/saving fails critically
-    dbData = generateInitialData();
-  }
+    return inMemoryDbData!;
 }
 
-// Function to save data to JSON file
-function saveData(): void {
-  try {
-    const dataString = JSON.stringify(dbData, null, 2); // Pretty print JSON
-    fs.writeFileSync(dataFilePath, dataString, 'utf-8');
-    // console.log(`[Service] Data saved successfully to ${dataFilePath}`); // Log less frequently
-  } catch (error) {
-    console.error('[Service] Error saving data:', error);
-  }
+// Helper function to write the database file (SERVER-SIDE ONLY)
+async function writeDb(data: DbData): Promise<void> {
+    // Dynamically import fs and path only when needed on the server
+    const fs = await import('fs');
+    const path = await import('path');
+    const dataDir = path.resolve(process.cwd(), 'data');
+    const dataFilePath = path.join(dataDir, 'db.json');
+
+    try {
+        const dataString = JSON.stringify(data, null, 2); // Pretty print JSON
+        fs.writeFileSync(dataFilePath, dataString, 'utf-8');
+        inMemoryDbData = data; // Update in-memory cache
+        // console.log(`[Service] Data saved successfully to ${dataFilePath}`);
+    } catch (error) {
+        console.error('[Service] Error saving data:', error);
+        // Invalidate cache on error to force reload next time
+        inMemoryDbData = null;
+    }
 }
 
-// Load data when the service module is initialized
-loadData();
 
 // --- Helper function to get Date objects from string ---
 // Use this when returning data *outside* the service if Date objects are preferred
@@ -211,11 +219,13 @@ function parseHeadlineDates(headline: Headline): Headline & { publishDate: Date 
 
 /**
  * Asynchronously retrieves a list of all available categories.
+ * Reads data from memory cache or file.
  * @returns A promise that resolves to an array of `Category` objects. Returns a shallow copy of the internal data.
  */
 export async function getCategories(): Promise<Category[]> {
   await new Promise(resolve => setTimeout(resolve, 20)); // Simulate tiny delay
   console.log('[Service] getCategories called');
+  const dbData = await readDb();
   return [...dbData.categories]; // Return a copy
 }
 
@@ -229,7 +239,9 @@ export async function getCategories(): Promise<Category[]> {
  */
 export async function createCategory(name: string): Promise<Category> {
      await new Promise(resolve => setTimeout(resolve, 50)); // Simulate 50ms delay
+     const dbData = await readDb(); // Read current data
      const trimmedName = name.trim();
+
      // Check if name already exists (case-insensitive)
      if (dbData.categories.some(cat => cat.name.toLowerCase() === trimmedName.toLowerCase())) {
          console.error(`[Service] createCategory failed: Name "${trimmedName}" already exists.`);
@@ -238,8 +250,12 @@ export async function createCategory(name: string): Promise<Category> {
      // Generate a simple unique ID for the mock data
      const newId = `category-${dbData.nextCategoryId++}`;
      const newCategory: Category = { id: newId, name: trimmedName };
-     dbData.categories.push(newCategory);
-     saveData(); // Persist changes
+     const updatedDbData = {
+         ...dbData,
+         categories: [...dbData.categories, newCategory],
+         nextCategoryId: dbData.nextCategoryId // Already incremented
+     };
+     await writeDb(updatedDbData); // Persist changes
      console.log("[Service] createCategory successful:", newCategory);
      return { ...newCategory }; // Return a copy
  }
@@ -255,7 +271,9 @@ export async function createCategory(name: string): Promise<Category> {
  */
 export async function updateCategory(id: string, name: string): Promise<void> {
      await new Promise(resolve => setTimeout(resolve, 50)); // Simulate 50ms delay
+     const dbData = await readDb(); // Read current data
      const index = dbData.categories.findIndex(cat => cat.id === id);
+
      if (index === -1) {
          console.error(`[Service] updateCategory failed: ID "${id}" not found.`);
          throw new Error(`Category with ID ${id} not found.`);
@@ -266,9 +284,12 @@ export async function updateCategory(id: string, name: string): Promise<void> {
         console.error(`[Service] updateCategory failed: Name "${trimmedName}" conflicts with another category.`);
         throw new Error(`Another category with name "${trimmedName}" already exists.`);
      }
-     dbData.categories[index].name = trimmedName;
-     saveData(); // Persist changes
-     console.log("[Service] updateCategory successful:", dbData.categories[index]);
+
+     const updatedCategories = [...dbData.categories];
+     updatedCategories[index] = { ...updatedCategories[index], name: trimmedName };
+     const updatedDbData = { ...dbData, categories: updatedCategories };
+     await writeDb(updatedDbData); // Persist changes
+     console.log("[Service] updateCategory successful:", updatedCategories[index]);
      return Promise.resolve();
  }
 
@@ -282,21 +303,22 @@ export async function updateCategory(id: string, name: string): Promise<void> {
  */
 export async function deleteCategory(id: string): Promise<void> {
      await new Promise(resolve => setTimeout(resolve, 100)); // Simulate 100ms delay (cascade)
+     const dbData = await readDb(); // Read current data
      const initialLength = dbData.categories.length;
-     dbData.categories = dbData.categories.filter(cat => cat.id !== id);
+     const updatedCategories = dbData.categories.filter(cat => cat.id !== id);
 
-     if (dbData.categories.length === initialLength) {
+     if (updatedCategories.length === initialLength) {
          console.warn(`[Service] deleteCategory: Category with ID "${id}" not found.`);
      } else {
         // Remove the category ID from all headlines
-        dbData.headlines = dbData.headlines.map(headline => {
-            const updatedCategories = headline.categories.filter(catId => catId !== id);
-            // Return a new object only if categories changed
-            return updatedCategories.length === headline.categories.length
+        const updatedHeadlines = dbData.headlines.map(headline => {
+            const filteredCatIds = headline.categories.filter(catId => catId !== id);
+            return filteredCatIds.length === headline.categories.length
                 ? headline
-                : { ...headline, categories: updatedCategories };
+                : { ...headline, categories: filteredCatIds };
         });
-        saveData(); // Persist changes
+        const updatedDbData = { ...dbData, categories: updatedCategories, headlines: updatedHeadlines };
+        await writeDb(updatedDbData); // Persist changes
         console.log(`[Service] deleteCategory successful: Deleted category ID "${id}" and removed from headlines.`);
      }
      return Promise.resolve();
@@ -336,7 +358,7 @@ export interface GetHeadlinesResult {
 
 /**
  * Asynchronously retrieves a list of headlines, supporting filtering, sorting by `order`, and pagination.
- * Reads data from the JSON file representation.
+ * Reads data from memory cache or file.
  *
  * **Filtering Logic:** (Same as before)
  * **Sorting:** Headlines are always sorted by the `order` field in ascending order.
@@ -355,6 +377,7 @@ export async function getHeadlines(
 ): Promise<GetHeadlinesResult> {
   await new Promise(resolve => setTimeout(resolve, 100)); // Simulate 100ms delay
   console.log('[Service] getHeadlines called with filters:', filters, `Page: ${page}, Size: ${pageSize}`);
+  const dbData = await readDb(); // Read data
 
   let filteredHeadlines = [...dbData.headlines]; // Start with a copy from dbData
 
@@ -411,12 +434,14 @@ export async function getHeadlines(
 
 /**
  * Asynchronously retrieves a single headline by its ID.
+ * Reads data from memory cache or file.
  * Converts the date string to a Date object upon retrieval.
  * @param id - The ID of the headline to retrieve.
  * @returns A promise that resolves to the `Headline` object (with Date) if found, or `null` otherwise.
  */
 export async function getHeadline(id: string): Promise<(Headline & { publishDate: Date }) | null> {
   await new Promise(resolve => setTimeout(resolve, 50)); // Simulate 50ms delay
+  const dbData = await readDb(); // Read data
   const headline = dbData.headlines.find(h => h.id === id);
   if (headline) {
       console.log(`[Service] getHeadline: Found ID "${id}"`);
@@ -442,8 +467,10 @@ export type HeadlineCreateInput = Omit<Headline, 'id' | 'order' | 'publishDate'>
  */
 export async function createHeadline(headlineData: HeadlineCreateInput): Promise<string> {
   await new Promise(resolve => setTimeout(resolve, 100)); // Simulate 100ms delay
+  const dbData = await readDb(); // Read current data
   const newId = `headline-${dbData.nextHeadlineId++}`;
   const maxOrder = dbData.headlines.reduce((max, h) => Math.max(max, h.order), -1);
+
   const newHeadline: Headline = {
     ...headlineData, // Spread the provided data
     subtitle: headlineData.subtitle || '', // Ensure subtitle is at least an empty string
@@ -451,8 +478,13 @@ export async function createHeadline(headlineData: HeadlineCreateInput): Promise
     id: newId,
     order: maxOrder + 1, // Assign the next order number
   };
-  dbData.headlines.push(newHeadline); // Add to the end
-  saveData(); // Persist changes
+
+  const updatedDbData = {
+      ...dbData,
+      headlines: [...dbData.headlines, newHeadline],
+      nextHeadlineId: dbData.nextHeadlineId // Already incremented
+  };
+  await writeDb(updatedDbData); // Persist changes
   console.log("[Service] createHeadline successful:", newHeadline)
   return newId;
 }
@@ -474,7 +506,9 @@ export type HeadlineUpdateInput = Partial<Omit<Headline, 'id' | 'order' | 'publi
  */
 export async function updateHeadline(id: string, headlineUpdate: HeadlineUpdateInput): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 100)); // Simulate 100ms delay
+  const dbData = await readDb(); // Read current data
   const index = dbData.headlines.findIndex(h => h.id === id);
+
   if (index === -1) {
     console.error(`[Service] updateHeadline failed: ID "${id}" not found.`);
     throw new Error(`Headline with ID ${id} not found.`);
@@ -491,15 +525,18 @@ export async function updateHeadline(id: string, headlineUpdate: HeadlineUpdateI
       dataToMerge.publishDate = updateData.publishDate;
   }
 
+  const updatedHeadlines = [...dbData.headlines];
   // Merge existing data with updateData
-  dbData.headlines[index] = {
-      ...dbData.headlines[index],
+  updatedHeadlines[index] = {
+      ...updatedHeadlines[index],
       ...dataToMerge,
       // Ensure subtitle is not undefined if cleared
-      subtitle: dataToMerge.subtitle !== undefined ? dataToMerge.subtitle : dbData.headlines[index].subtitle,
+      subtitle: dataToMerge.subtitle !== undefined ? dataToMerge.subtitle : updatedHeadlines[index].subtitle,
    };
-   saveData(); // Persist changes
-   console.log("[Service] updateHeadline successful:", dbData.headlines[index])
+
+   const updatedDbData = { ...dbData, headlines: updatedHeadlines };
+   await writeDb(updatedDbData); // Persist changes
+   console.log("[Service] updateHeadline successful:", updatedHeadlines[index])
   return Promise.resolve();
 }
 
@@ -512,12 +549,14 @@ export async function updateHeadline(id: string, headlineUpdate: HeadlineUpdateI
  */
 export async function reorderHeadlines(orderedIds: string[]): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 150)); // Simulate 150ms delay
+    const dbData = await readDb(); // Read current data
+    const currentHeadlines = [...dbData.headlines]; // Work with a copy
 
     const newOrderMap = new Map(orderedIds.map((id, index) => [id, index]));
     let updatedCount = 0;
     // Find the minimum current order among the items being reordered to use as a base
     let minCurrentOrder = Infinity;
-     dbData.headlines.forEach(headline => {
+     currentHeadlines.forEach(headline => {
          if (newOrderMap.has(headline.id)) {
              minCurrentOrder = Math.min(minCurrentOrder, headline.order);
          }
@@ -527,7 +566,7 @@ export async function reorderHeadlines(orderedIds: string[]): Promise<void> {
      if (minCurrentOrder === Infinity) minCurrentOrder = 0;
 
      // Update order based on the new map, adding the base offset
-    dbData.headlines.forEach(headline => {
+    currentHeadlines.forEach(headline => {
         if (newOrderMap.has(headline.id)) {
             // Assign new order relative to the start of the dragged group
             headline.order = minCurrentOrder + newOrderMap.get(headline.id)!;
@@ -536,15 +575,15 @@ export async function reorderHeadlines(orderedIds: string[]): Promise<void> {
     });
 
     // Re-sort the entire list to correctly place the reordered items and handle potential gaps/duplicates
-    dbData.headlines.sort((a, b) => a.order - b.order);
+    currentHeadlines.sort((a, b) => a.order - b.order);
 
     // Renumber all items sequentially after sorting to ensure clean order numbers
-    dbData.headlines.forEach((headline, index) => {
+    currentHeadlines.forEach((headline, index) => {
         headline.order = index;
     });
 
-
-    saveData(); // Persist changes
+    const updatedDbData = { ...dbData, headlines: currentHeadlines };
+    await writeDb(updatedDbData); // Persist changes
     console.log(`[Service] reorderHeadlines: Updated order for ${updatedCount} headlines. Full list re-sorted and renumbered.`);
     return Promise.resolve();
 }
@@ -558,10 +597,13 @@ export async function reorderHeadlines(orderedIds: string[]): Promise<void> {
  */
 export async function deleteHeadline(id: string): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 80)); // Simulate 80ms delay
+  const dbData = await readDb(); // Read current data
   const initialLength = dbData.headlines.length;
-  dbData.headlines = dbData.headlines.filter(h => h.id !== id);
-  if (dbData.headlines.length < initialLength) {
-    saveData(); // Persist changes
+  const updatedHeadlines = dbData.headlines.filter(h => h.id !== id);
+
+  if (updatedHeadlines.length < initialLength) {
+    const updatedDbData = { ...dbData, headlines: updatedHeadlines };
+    await writeDb(updatedDbData); // Persist changes
     console.log(`[Service] deleteHeadline successful: Deleted ID "${id}"`);
   } else {
     console.warn(`[Service] deleteHeadline: Headline with ID "${id}" not found.`);
@@ -579,12 +621,15 @@ export async function deleteHeadline(id: string): Promise<void> {
  */
 export async function deleteMultipleHeadlines(ids: string[]): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 200)); // Simulate 200ms bulk delay
+    const dbData = await readDb(); // Read current data
     const idSet = new Set(ids);
     const initialLength = dbData.headlines.length;
-    dbData.headlines = dbData.headlines.filter(h => !idSet.has(h.id));
-    const deletedCount = initialLength - dbData.headlines.length;
+    const updatedHeadlines = dbData.headlines.filter(h => !idSet.has(h.id));
+    const deletedCount = initialLength - updatedHeadlines.length;
+
     if (deletedCount > 0) {
-        saveData(); // Persist changes
+        const updatedDbData = { ...dbData, headlines: updatedHeadlines };
+        await writeDb(updatedDbData); // Persist changes
     }
     console.log(`[Service] deleteMultipleHeadlines: Deleted ${deletedCount} headlines.`);
     return Promise.resolve();
@@ -599,17 +644,21 @@ export async function deleteMultipleHeadlines(ids: string[]): Promise<void> {
  */
 export async function updateMultipleHeadlineStates(ids: string[], state: HeadlineState): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 200)); // Simulate 200ms bulk delay
+    const dbData = await readDb(); // Read current data
     const idSet = new Set(ids);
     let updatedCount = 0;
-    dbData.headlines = dbData.headlines.map(h => {
+
+    const updatedHeadlines = dbData.headlines.map(h => {
         if (idSet.has(h.id) && h.state !== state) { // Only update if state is different
             updatedCount++;
             return { ...h, state: state };
         }
         return h;
     });
+
     if (updatedCount > 0) {
-        saveData(); // Persist changes
+        const updatedDbData = { ...dbData, headlines: updatedHeadlines };
+        await writeDb(updatedDbData); // Persist changes
     }
     console.log(`[Service] updateMultipleHeadlineStates: Updated state to "${state}" for ${updatedCount} headlines.`);
     return Promise.resolve();

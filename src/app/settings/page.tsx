@@ -11,44 +11,53 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSettings, ExportFormat, TxtExportMode, ALL_HEADLINE_STATES, Theme, FontSize, Font } from "@/context/settings-context";
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
-import type { HeadlineState, Category } from "@/services/headline";
-import { getCategories } from '@/services/headline'; // Import getCategories
-import { CategoryManager } from "@/components/settings/category-manager"; // Import CategoryManager
-import { useState, useEffect } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import type { HeadlineState } from '@/services/headline';
+// Removed direct import of getCategories from service
+// import { getCategories } from '@/services/headline';
+import { CategoryManager } from "@/components/settings/category-manager";
+// Removed useState, useEffect, Skeleton related to direct category fetching here
+// import { useState, useEffect } from "react";
+// import { Skeleton } from "@/components/ui/skeleton";
 
 
+/**
+ * @fileoverview Settings page component for configuring application preferences.
+ * Allows users to manage categories, customize display settings (theme, font, colors),
+ * and configure data export options.
+ */
 export default function SettingsPage() {
   const { settings, setSettings } = useSettings();
   const { t } = useLanguage();
   const { toast } = useToast();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
-  const [categoryError, setCategoryError] = useState<string | null>(null);
+  // Removed state related to direct category fetching
+  // const [categories, setCategories] = useState<Category[]>([]);
+  // const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  // const [categoryError, setCategoryError] = useState<string | null>(null);
 
 
-   // Fetch categories on mount
-   useEffect(() => {
-       const fetchCategories = async () => {
-           setIsLoadingCategories(true);
-           setCategoryError(null);
-           try {
-               const fetchedCategories = await getCategories();
-               setCategories(fetchedCategories);
-           } catch (error) {
-               console.error("Failed to fetch categories:", error);
-               setCategoryError(t('categoryFetchError')); // Use translation
-               toast({
-                  title: t('error'),
-                  description: t('categoryFetchError'),
-                  variant: 'destructive'
-               });
-           } finally {
-               setIsLoadingCategories(false);
-           }
-       };
-       fetchCategories();
-   }, [t, toast]); // Add t and toast as dependencies
+  // Removed useEffect for fetching categories directly in this component
+   // // Fetch categories on mount
+   // useEffect(() => {
+   //     const fetchCategories = async () => {
+   //         setIsLoadingCategories(true);
+   //         setCategoryError(null);
+   //         try {
+   //             const fetchedCategories = await getCategories(); // Removed direct call
+   //             setCategories(fetchedCategories);
+   //         } catch (error) {
+   //             console.error("Failed to fetch categories:", error);
+   //             setCategoryError(t('categoryFetchError')); // Use translation
+   //             toast({
+   //                title: t('error'),
+   //                description: t('categoryFetchError'),
+   //                variant: 'destructive'
+   //             });
+   //         } finally {
+   //             setIsLoadingCategories(false);
+   //         }
+   //     };
+   //     fetchCategories();
+   // }, [t, toast]); // Add t and toast as dependencies
 
 
   const handleFormatChange = (value: string) => {
@@ -109,110 +118,104 @@ export default function SettingsPage() {
     });
   };
 
-  // Function to refresh categories list, passed down to CategoryManager
-  const refreshCategories = async () => {
-      setIsLoadingCategories(true);
-      setCategoryError(null);
-      try {
-          const fetchedCategories = await getCategories();
-          setCategories(fetchedCategories);
-      } catch (error) {
-          console.error("Failed to refresh categories:", error);
-          setCategoryError(t('categoryFetchError'));
-      } finally {
-          setIsLoadingCategories(false);
-      }
-  };
+  // Note: refreshCategories function is now handled within CategoryManager itself
 
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">{t('settings')}</h1>
 
-       {/* Category Management Card */}
+       {/* Category Management Card - Now fetches its own data */}
       <Card>
         <CardHeader>
           <CardTitle>{t('manageCategories')}</CardTitle>
           <CardDescription>{t('manageCategoriesDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoadingCategories ? (
-            <div className="space-y-2">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-8 w-1/2" />
-              <Skeleton className="h-8 w-3/4" />
-            </div>
-          ) : categoryError ? (
-             <p className="text-destructive">{categoryError}</p>
-          ) : (
-            <CategoryManager categories={categories} onCategoriesUpdate={refreshCategories} />
-          )}
+            {/* Pass initial empty array or let CategoryManager handle loading state */}
+            <CategoryManager />
         </CardContent>
       </Card>
 
        {/* Display Settings Card */}
         <Card>
             <CardHeader>
-                <CardTitle>Display Settings</CardTitle>
-                <CardDescription>Customize the look and feel of the application.</CardDescription>
+                <CardTitle>{t('displaySettings')}</CardTitle>
+                <CardDescription>{t('displaySettingsDesc')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 {/* Theme */}
                 <div className="space-y-2">
-                    <Label>Theme</Label>
+                    <Label>{t('theme')}</Label>
                     <RadioGroup value={settings.theme} onValueChange={handleThemeChange} className="flex space-x-4">
                         <div className="flex items-center space-x-2">
                             <RadioGroupItem value="light" id="theme-light" />
-                            <Label htmlFor="theme-light" className="font-normal">Light</Label>
+                            <Label htmlFor="theme-light" className="font-normal">{t('light')}</Label>
                         </div>
                         <div className="flex items-center space-x-2">
                             <RadioGroupItem value="dark" id="theme-dark" />
-                            <Label htmlFor="theme-dark" className="font-normal">Dark</Label>
+                            <Label htmlFor="theme-dark" className="font-normal">{t('dark')}</Label>
                         </div>
+                         {/* Custom theme is managed via color pickers below */}
+                         {/* <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="custom" id="theme-custom" />
+                            <Label htmlFor="theme-custom" className="font-normal">{t('custom')}</Label>
+                        </div> */}
                     </RadioGroup>
                 </div>
 
                 {/* Font Size */}
                 <div className="space-y-2">
-                    <Label>Font Size</Label>
+                    <Label>{t('fontSize')}</Label>
                     <RadioGroup value={settings.fontSize} onValueChange={handleFontSizeChange} className="flex space-x-4">
                         <div className="flex items-center space-x-2">
                             <RadioGroupItem value="small" id="fontSize-small" />
-                            <Label htmlFor="fontSize-small" className="font-normal">Small</Label>
+                            <Label htmlFor="fontSize-small" className="font-normal">{t('small')}</Label>
                         </div>
                         <div className="flex items-center space-x-2">
                             <RadioGroupItem value="medium" id="fontSize-medium" />
-                            <Label htmlFor="fontSize-medium" className="font-normal">Medium</Label>
+                            <Label htmlFor="fontSize-medium" className="font-normal">{t('medium')}</Label>
                         </div>
                         <div className="flex items-center space-x-2">
                             <RadioGroupItem value="large" id="fontSize-large" />
-                            <Label htmlFor="fontSize-large" className="font-normal">Large</Label>
+                            <Label htmlFor="fontSize-large" className="font-normal">{t('large')}</Label>
                         </div>
                     </RadioGroup>
                 </div>
 
                 {/* Font Selection */}
                 <div className="space-y-2">
-                    <Label>Font</Label>
+                    <Label>{t('fontFamily')}</Label>
                     <Select value={settings.font} onValueChange={handleFontChange}>
                         <SelectTrigger>
-                            <SelectValue placeholder="Select a font" />
+                            <SelectValue placeholder={t('selectFont')} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="Arial">Arial</SelectItem>
-                            <SelectItem value="Helvetica">Helvetica</SelectItem>
-                            <SelectItem value="Times New Roman">Times New Roman</SelectItem>
-                            <SelectItem value="Open Sans">Open Sans</SelectItem>
+                            <SelectItem value="Arial">{t('Arial')}</SelectItem>
+                            <SelectItem value="Helvetica">{t('Helvetica')}</SelectItem>
+                            <SelectItem value="Times New Roman">{t('TimesNewRoman')}</SelectItem>
+                            <SelectItem value="Open Sans">{t('OpenSans')}</SelectItem>
+                            {/* Add more fonts if needed */}
                         </SelectContent>
                     </Select>
                 </div>
 
                 {/* Custom Colors */}
-                <div className="space-y-2">
-                    <Label>Background Color (HSL)</Label>
-                    <Input type="text" value={settings.background} onChange={handleBackgroundColorChange} />
-                    <Label>Text Color (HSL)</Label>
-                    <Input type="text" value={settings.foreground} onChange={handleForegroundColorChange} />
+                {/* Consider showing these only if theme is 'custom' or linking them */}
+                <div className="space-y-2 border-t pt-4 mt-4">
+                    <Label className="font-semibold">{t('customColors')}</Label>
+                     <p className="text-sm text-muted-foreground">{t('customColorsDesc')}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="backgroundColor">{t('backgroundColor')}</Label>
+                            <Input id="backgroundColor" type="text" value={settings.background} onChange={handleBackgroundColorChange} placeholder="e.g., 210 20% 98%" />
+                        </div>
+                        <div>
+                            <Label htmlFor="foregroundColor">{t('foregroundColor')}</Label>
+                            <Input id="foregroundColor" type="text" value={settings.foreground} onChange={handleForegroundColorChange} placeholder="e.g., 210 10% 23%" />
+                        </div>
+                    </div>
+                     <p className="text-xs text-muted-foreground pt-2">{t('hslFormatHint')}</p>
                 </div>
             </CardContent>
         </Card>
@@ -257,10 +260,13 @@ export default function SettingsPage() {
                       <RadioGroupItem value="single" id="txtmode-single" />
                       <Label htmlFor="txtmode-single" className="font-normal">{t('txtSingleFile')}</Label>
                   </div>
-                  {/* <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                  {/* Multiple file export option (currently disabled in API) */}
+                  <div className="flex items-center space-x-2 rtl:space-x-reverse">
                       <RadioGroupItem value="multiple" id="txtmode-multiple" disabled />
-                      <Label htmlFor="txtmode-multiple" className="font-normal text-muted-foreground">{t('txtMultipleFiles')} ({t('comingSoon')})</Label>
-                  </div> */}
+                      <Label htmlFor="txtmode-multiple" className="font-normal text-muted-foreground">
+                          {t('txtMultipleFiles')} ({t('comingSoon')})
+                      </Label>
+                  </div>
               </RadioGroup>
             </div>
           )}
@@ -296,4 +302,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

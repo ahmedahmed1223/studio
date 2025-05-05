@@ -1,35 +1,68 @@
 
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react'; // Import React
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusCircle, Edit, Trash2, Save, X } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from '@/context/language-context';
-// Removed AlertDialog imports
-// import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { createCategoryAction, updateCategoryAction, deleteCategoryAction } from '@/actions/category-actions';
+import { createCategoryAction, updateCategoryAction, deleteCategoryAction, getCategoriesAction } from '@/actions/category-actions'; // Import getCategoriesAction
 import type { Category } from '@/services/headline';
-import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton for loading state
+import { Skeleton } from "@/components/ui/skeleton";
 
+/**
+ * @fileoverview Component for managing headline categories.
+ * Allows creating, editing, and deleting categories. Fetches categories via server action.
+ */
+
+// No longer needs categories passed as props
 interface CategoryManagerProps {
-  categories: Category[];
-  onCategoriesUpdate: () => void; // Callback to refresh categories list in parent
-  isLoading?: boolean; // Optional prop to indicate loading state
-  error?: string | null; // Optional prop to show error message
+  // Removed props: categories, onCategoriesUpdate, isLoading, error
 }
 
-export function CategoryManager({ categories, onCategoriesUpdate, isLoading = false, error = null }: CategoryManagerProps) {
+export function CategoryManager({}: CategoryManagerProps) {
   const { t } = useLanguage();
   const { toast } = useToast();
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null); // Store ID of category being deleted
+
+  const fetchCategories = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedCategories = await getCategoriesAction(); // Use server action
+      if (fetchedCategories.success && fetchedCategories.categories) {
+        setCategories(fetchedCategories.categories);
+      } else {
+          throw new Error(fetchedCategories.errors?.join(', ') || t('categoryFetchError'));
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch categories:", err);
+      setError(err.message || t('categoryFetchError'));
+      toast({
+          title: t('error'),
+          description: err.message || t('categoryFetchError'),
+          variant: 'destructive'
+      });
+      setCategories([]); // Clear categories on error
+    } finally {
+      setIsLoading(false);
+    }
+  }, [t, toast]); // Dependencies for fetchCategories
+
+  // Fetch categories on component mount
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const handleAddCategory = async () => {
     const trimmedName = newCategoryName.trim();
@@ -44,7 +77,7 @@ export function CategoryManager({ categories, onCategoriesUpdate, isLoading = fa
     if (result.success && result.category) {
       toast({ title: t('categoryCreatedTitle'), description: t('categoryCreatedDesc', { name: result.category.name }) });
       setNewCategoryName('');
-      onCategoriesUpdate(); // Refresh list
+      fetchCategories(); // Refresh list by re-fetching
     } else {
       toast({ title: t('error'), description: result.errors?.join(', ') || t('categoryCreateError'), variant: 'destructive' });
     }
@@ -81,21 +114,20 @@ export function CategoryManager({ categories, onCategoriesUpdate, isLoading = fa
         toast({ title: t('categoryUpdatedTitle'), description: t('categoryUpdatedDesc', { name: trimmedName }) });
         setEditingCategoryId(null);
         setEditingCategoryName('');
-        onCategoriesUpdate(); // Refresh list
+        fetchCategories(); // Refresh list
      } else {
         toast({ title: t('error'), description: result.errors?.join(', ') || t('categoryUpdateError'), variant: 'destructive' });
      }
   };
 
   const handleDeleteCategory = async (id: string) => {
-    // Removed confirmation dialog
     setIsDeleting(id);
     const result = await deleteCategoryAction(id);
     setIsDeleting(null); // Reset deleting state regardless of outcome
 
     if (result.success) {
       toast({ title: t('categoryDeletedTitle'), description: t('categoryDeletedDesc') });
-      onCategoriesUpdate(); // Refresh list
+      fetchCategories(); // Refresh list
        // If the deleted category was being edited, cancel the edit
       if (editingCategoryId === id) {
           handleCancelEdit();
@@ -139,7 +171,7 @@ export function CategoryManager({ categories, onCategoriesUpdate, isLoading = fa
       </div>
 
        {/* Error Display */}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && !isLoading && <p className="text-sm text-destructive">{error}</p>}
 
       {/* Categories Table */}
       <div className="rounded-md border">
@@ -206,7 +238,6 @@ export function CategoryManager({ categories, onCategoriesUpdate, isLoading = fa
                         <Button variant="ghost" size="icon" onClick={() => handleEditClick(category)} aria-label={t('editCategory')} title={t('editCategory')}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        {/* Removed AlertDialog Trigger */}
                          <Button
                             variant="ghost"
                             size="icon"
@@ -234,4 +265,3 @@ export function CategoryManager({ categories, onCategoriesUpdate, isLoading = fa
     </div>
   );
 }
-
