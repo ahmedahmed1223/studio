@@ -60,6 +60,14 @@ export interface Headline {
    * The scheduled publish date/time for the headline.
    */
   publishDate: Date;
+  /**
+   * Indicates if the headline is breaking news.
+   */
+  isBreaking: boolean;
+  /**
+   * The display order of the headline. Lower numbers appear first.
+   */
+  order: number;
 }
 
 // --- Mock Data Store ---
@@ -69,28 +77,36 @@ let mockCategories: Category[] = [
   { id: 'business', name: 'Business' },
   { id: 'world', name: 'World News' },
   { id: 'local', name: 'Local Events' },
+  { id: 'breaking', name: 'Breaking News' }, // Added dedicated category for simpler mapping if needed
 ];
 
 let mockHeadlines: Headline[] = Array.from({ length: 25 }, (_, i) => {
     const stateIndex = i % 4;
     const priorityIndex = i % 2;
-    const categoryIndex = i % mockCategories.length;
+    const categoryIndex = i % (mockCategories.length -1); // Avoid assigning 'breaking' randomly initially
     const daysToAdd = Math.floor(Math.random() * 30); // Random publish date within 30 days
     const hour = Math.floor(Math.random() * 24);
     const minute = Math.floor(Math.random() * 60);
     const publishDate = new Date();
     publishDate.setDate(publishDate.getDate() + daysToAdd);
     publishDate.setHours(hour, minute, 0, 0);
+    const isBreaking = i % 7 === 0; // Make roughly 1 in 7 breaking news for demo
 
     return {
         id: `headline-${i + 1}`,
-        mainTitle: `Headline ${i + 1}: Breaking News about topic ${i}`,
+        mainTitle: `Headline ${i + 1}: ${isBreaking ? 'BREAKING' : 'News'} about topic ${i}`,
         subtitle: `This is a short subtitle explaining more about headline ${i + 1}. It provides context for event ${i}.`,
-        categories: [mockCategories[categoryIndex].id, ...( i % 5 === 0 && categoryIndex > 0 ? [mockCategories[categoryIndex-1].id] : [])], // Add a second category sometimes
+        categories: [
+            mockCategories[categoryIndex].id,
+            ...( i % 5 === 0 && categoryIndex > 0 ? [mockCategories[categoryIndex-1].id] : []),
+            ...(isBreaking ? ['breaking'] : []) // Add breaking category if it's breaking
+        ],
         state: ['Draft', 'In Review', 'Approved', 'Archived'][stateIndex] as HeadlineState,
         priority: ['Normal', 'High'][priorityIndex] as HeadlinePriority,
         displayLines: (i % 3) + 1,
         publishDate: publishDate,
+        isBreaking: isBreaking,
+        order: i, // Initial order based on creation index
     };
 });
 
@@ -116,6 +132,8 @@ export interface HeadlineFilters {
   states?: HeadlineState[];
   category?: string;
   search?: string;
+  isBreaking?: boolean; // Added filter for breaking news
+  ids?: string[]; // Added filter for specific IDs (used by export)
 }
 
 /**
@@ -128,7 +146,7 @@ export interface GetHeadlinesResult {
 
 
 /**
- * Asynchronously retrieves a list of headlines with filtering and pagination.
+ * Asynchronously retrieves a list of headlines with filtering, sorting, and pagination.
  * Simulates API delay.
  * @param filters An object containing optional filters.
  * @param page The page number to retrieve (1-based). Set to 0 for all results.
@@ -145,34 +163,46 @@ export async function getHeadlines(
   let filteredHeadlines = [...mockHeadlines]; // Start with a copy
 
   // Apply filters
-  if (filters?.states && filters.states.length > 0) {
-    const stateSet = new Set(filters.states);
-    filteredHeadlines = filteredHeadlines.filter(h => stateSet.has(h.state));
-  }
-  if (filters?.category) {
-    filteredHeadlines = filteredHeadlines.filter(h => h.categories.includes(filters.category!));
-  }
-   if (filters?.search) {
-       const searchTerm = filters.search.toLowerCase();
-       filteredHeadlines = filteredHeadlines.filter(h =>
-           h.mainTitle.toLowerCase().includes(searchTerm) ||
-           h.subtitle.toLowerCase().includes(searchTerm)
-       );
+  if (filters?.ids && filters.ids.length > 0) {
+      const idSet = new Set(filters.ids);
+      filteredHeadlines = filteredHeadlines.filter(h => idSet.has(h.id));
+  } else {
+      // Apply other filters only if not filtering by specific IDs
+      if (filters?.states && filters.states.length > 0) {
+        const stateSet = new Set(filters.states);
+        filteredHeadlines = filteredHeadlines.filter(h => stateSet.has(h.state));
+      }
+      if (filters?.category) {
+        filteredHeadlines = filteredHeadlines.filter(h => h.categories.includes(filters.category!));
+      }
+       if (filters?.search) {
+           const searchTerm = filters.search.toLowerCase();
+           filteredHeadlines = filteredHeadlines.filter(h =>
+               h.mainTitle.toLowerCase().includes(searchTerm) ||
+               h.subtitle.toLowerCase().includes(searchTerm)
+           );
+       }
+       if (filters?.isBreaking !== undefined) {
+           filteredHeadlines = filteredHeadlines.filter(h => h.isBreaking === filters.isBreaking);
+       }
    }
+
+   // Sort by order field (ascending)
+   filteredHeadlines.sort((a, b) => a.order - b.order);
 
    // Get total count *after* filtering
    const totalCount = filteredHeadlines.length;
 
-  // Apply pagination only if page and pageSize are positive
+  // Apply pagination only if page and pageSize are positive and not fetching by IDs
    let paginatedHeadlines = filteredHeadlines;
-   if (page > 0 && pageSize > 0) {
+   if (page > 0 && pageSize > 0 && (!filters?.ids || filters.ids.length === 0)) {
        const startIndex = (page - 1) * pageSize;
        const endIndex = startIndex + pageSize;
        paginatedHeadlines = filteredHeadlines.slice(startIndex, endIndex);
    }
 
   return {
-      headlines: paginatedHeadlines,
+      headlines: paginatedHeadlines, // Return copies to prevent direct mutation
       totalCount: totalCount,
   };
 }
@@ -193,17 +223,20 @@ export async function getHeadline(id: string): Promise<Headline | null> {
 /**
  * Asynchronously creates a new headline.
  * Simulates API delay and adds to the mock store.
- * @param headline The headline data to create (without ID).
+ * @param headline The headline data to create (without ID, order). Order is automatically assigned.
  * @returns A promise that resolves to the ID of the newly created headline.
  */
-export async function createHeadline(headline: Omit<Headline, 'id'>): Promise<string> {
+export async function createHeadline(headline: Omit<Headline, 'id' | 'order'>): Promise<string> {
   await new Promise(resolve => setTimeout(resolve, 100)); // Simulate network delay
   const newId = `headline-${nextHeadlineId++}`;
+   // Assign a high order number initially, assuming new items go to the end
+  const maxOrder = mockHeadlines.reduce((max, h) => Math.max(max, h.order), -1);
   const newHeadline: Headline = {
     ...headline,
     id: newId,
+    order: maxOrder + 1, // Place at the end
   };
-  mockHeadlines.unshift(newHeadline); // Add to the beginning of the array
+  mockHeadlines.push(newHeadline); // Add to the end of the array
   console.log("Created headline:", newHeadline)
   return newId;
 }
@@ -221,10 +254,38 @@ export async function updateHeadline(id: string, headlineUpdate: Partial<Omit<He
   if (index === -1) {
     throw new Error(`Headline with ID ${id} not found.`);
   }
-  mockHeadlines[index] = { ...mockHeadlines[index], ...headlineUpdate };
+  // Prevent direct update of order via this function; use reorder for that
+  const { order, ...updateData } = headlineUpdate;
+  mockHeadlines[index] = { ...mockHeadlines[index], ...updateData };
    console.log("Updated headline:", mockHeadlines[index])
   return;
 }
+
+
+/**
+ * Asynchronously updates the order of multiple headlines.
+ * Simulates API delay and updates the mock store.
+ * @param orderedIds An array of headline IDs in the desired new order.
+ * @returns A promise that resolves when the headlines have been reordered.
+ */
+export async function reorderHeadlines(orderedIds: string[]): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 150)); // Simulate network delay for reorder
+    const newOrderMap = new Map(orderedIds.map((id, index) => [id, index]));
+
+    // Update the order property for each headline based on the new map
+    mockHeadlines.forEach(headline => {
+        if (newOrderMap.has(headline.id)) {
+            headline.order = newOrderMap.get(headline.id)!;
+        }
+    });
+
+    // Optionally re-sort the main mockHeadlines array by the new order
+    mockHeadlines.sort((a, b) => a.order - b.order);
+
+    console.log("Reordered headlines. New order:", mockHeadlines.map(h => ({ id: h.id, order: h.order })));
+    return;
+}
+
 
 /**
  * Asynchronously deletes a headline.
@@ -241,8 +302,47 @@ export async function deleteHeadline(id: string): Promise<void> {
     // throw new Error(`Headline with ID ${id} not found for deletion.`);
   }
    console.log("Deleted headline with ID:", id)
+   // No need to explicitly reorder after deletion, gaps are handled by sorting
   return;
 }
+
+// --- Bulk Actions ---
+
+/**
+ * Asynchronously deletes multiple headlines.
+ * @param ids Array of headline IDs to delete.
+ * @returns A promise that resolves when headlines are deleted.
+ */
+export async function deleteMultipleHeadlines(ids: string[]): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 200)); // Simulate bulk delay
+    const idSet = new Set(ids);
+    const initialLength = mockHeadlines.length;
+    mockHeadlines = mockHeadlines.filter(h => !idSet.has(h.id));
+    console.log(`Deleted ${initialLength - mockHeadlines.length} headlines.`);
+    // No need to explicitly reorder after deletion
+    return;
+}
+
+/**
+ * Asynchronously updates the state of multiple headlines.
+ * @param ids Array of headline IDs to update.
+ * @param state The new state to set.
+ * @returns A promise that resolves when headlines are updated.
+ */
+export async function updateMultipleHeadlineStates(ids: string[], state: HeadlineState): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 200)); // Simulate bulk delay
+    const idSet = new Set(ids);
+    let updatedCount = 0;
+    mockHeadlines.forEach(h => {
+        if (idSet.has(h.id)) {
+            h.state = state;
+            updatedCount++;
+        }
+    });
+    console.log(`Updated state to "${state}" for ${updatedCount} headlines.`);
+    return;
+}
+
 
 // --- Category Management ---
 

@@ -6,22 +6,19 @@ import { Button } from "@/components/ui/button";
 import { PlusCircle } from 'lucide-react';
 import { HeadlineEditorModal } from './headline-editor-modal';
 import type { Category } from '@/services/headline';
-// import { getCategories } from '@/services/headline'; // No longer needed here
-import { useLanguage } from '@/context/language-context'; // Import language context
+import { useLanguage } from '@/context/language-context';
 
 interface CreateHeadlineButtonProps {
-    categories: Category[]; // Accept categories as a prop
+    categories: Category[];
+    isBreaking?: boolean; // Optional: To set the default for the modal's checkbox
 }
 
 
-export function CreateHeadlineButton({ categories }: CreateHeadlineButtonProps) {
+export function CreateHeadlineButton({ categories, isBreaking = false }: CreateHeadlineButtonProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  // const [categories, setCategories] = useState<Category[]>([]); // Categories now come from props
-  // const [isLoadingCategories, setIsLoadingCategories] = useState(false); // No longer loading here
-  const { t } = useLanguage(); // Get translation function
+  const { t } = useLanguage();
 
   const handleOpenModal = () => {
-    // No need to fetch categories here anymore
     setIsModalOpen(true);
   };
 
@@ -33,14 +30,15 @@ export function CreateHeadlineButton({ categories }: CreateHeadlineButtonProps) 
     <>
       <Button onClick={handleOpenModal} >
         <PlusCircle className="mr-2 h-4 w-4" />
-        {t('createHeadline')}
+        {/* Adjust button text if needed based on context */}
+        {isBreaking ? t('createBreakingNews') : t('createHeadline')}
       </Button>
 
-      {/* Ensure modal opens only when isModalOpen is true */}
       <HeadlineEditorModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         categories={categories}
+        isBreaking={isBreaking} // Pass the isBreaking prop to the modal
         // headline prop is omitted for creation mode
       />
     </>

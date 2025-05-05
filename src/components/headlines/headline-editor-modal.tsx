@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea"; // Assuming Textarea is similar to Input
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -34,32 +35,52 @@ import * as z from 'zod';
 import { createHeadlineAction, updateHeadlineAction } from '@/actions/headline-actions';
 import { useToast } from '@/hooks/use-toast';
 import { HeadlinePreview } from './headline-preview';
-import { useLanguage } from '@/context/language-context'; // Import language context
+import { useLanguage } from '@/context/language-context';
+
+// Placeholder for a rich text editor component
+// Replace this with an actual rich text editor integration (e.g., Tiptap, Quill, Slate)
+const RichTextEditor = ({ value, onChange, ...props }: { value: string; onChange: (value: string) => void; [key: string]: any }) => {
+    // Basic textarea for now, add spellCheck attribute
+    return (
+        <Textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            {...props}
+            spellCheck="true" // Enable browser's spell checker
+            className="min-h-[150px]" // Give it more height
+        />
+    );
+};
+
 
 interface HeadlineEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   headline?: Headline | null; // Optional: Pass headline for editing
   categories: Category[];
+  isBreaking?: boolean; // Optional: Default value for the breaking news checkbox
 }
 
+// Add isBreaking to the schema
 const headlineSchema = z.object({
   mainTitle: z.string().min(1, { message: "Main title is required" }),
-  subtitle: z.string().optional(),
+  subtitle: z.string().optional(), // Consider making subtitle rich text too if needed
+  content: z.string().optional(), // Field for rich text content
   categoryIds: z.array(z.string()).min(1, { message: "At least one category is required" }),
   state: z.enum(['Draft', 'In Review', 'Approved', 'Archived']),
   priority: z.enum(['High', 'Normal']),
   displayLines: z.number().min(1).max(3),
   publishDate: z.date({ required_error: "Publish date is required" }),
   publishTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: "Invalid time format (HH:MM)" }).optional(),
+  isBreaking: z.boolean().default(false), // Add isBreaking field
 });
 
 type HeadlineFormData = z.infer<typeof headlineSchema>;
 
-export function HeadlineEditorModal({ isOpen, onClose, headline, categories }: HeadlineEditorModalProps) {
+export function HeadlineEditorModal({ isOpen, onClose, headline, categories, isBreaking: initialIsBreaking = false }: HeadlineEditorModalProps) {
   const isEditing = !!headline;
   const { toast } = useToast();
-  const { t } = useLanguage(); // Get translation function
+  const { t } = useLanguage();
   const [selectedTime, setSelectedTime] = useState<string>(headline ? format(headline.publishDate, 'HH:mm') : format(new Date(), 'HH:mm'));
 
 
@@ -70,18 +91,20 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories }: H
     watch,
     reset,
     formState: { errors, isSubmitting },
-    setValue, // To set date/time values
+    setValue,
   } = useForm<HeadlineFormData>({
     resolver: zodResolver(headlineSchema),
     defaultValues: {
       mainTitle: headline?.mainTitle || '',
       subtitle: headline?.subtitle || '',
+      content: '', // Initialize rich text content (load if editing)
       categoryIds: headline?.categories || [],
       state: headline?.state || 'Draft',
       priority: headline?.priority || 'Normal',
       displayLines: headline?.displayLines || 2,
       publishDate: headline?.publishDate || new Date(),
       publishTime: headline ? format(headline.publishDate, 'HH:mm') : format(new Date(), 'HH:mm'),
+      isBreaking: headline?.isBreaking ?? initialIsBreaking, // Use provided initial value or default
     },
   });
 
@@ -95,16 +118,18 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories }: H
         reset({
             mainTitle: headline?.mainTitle || '',
             subtitle: headline?.subtitle || '',
+            content: '', // Reset/load content for editing
             categoryIds: headline?.categories || [],
             state: headline?.state || 'Draft',
             priority: headline?.priority || 'Normal',
             displayLines: headline?.displayLines || 2,
             publishDate: headline?.publishDate || new Date(),
             publishTime: defaultTime,
+            isBreaking: headline?.isBreaking ?? initialIsBreaking, // Reset isBreaking
         });
         setSelectedTime(defaultTime);
     }
-  }, [isOpen, headline, reset]);
+  }, [isOpen, headline, reset, initialIsBreaking]);
 
 
   const onSubmit = async (data: HeadlineFormData) => {
@@ -117,22 +142,24 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories }: H
       const headlineData = {
           mainTitle: data.mainTitle,
           subtitle: data.subtitle || '',
+          // Add content: data.content || '', // Include rich text content
           categories: data.categoryIds,
           state: data.state,
           priority: data.priority,
           displayLines: data.displayLines,
           publishDate: combinedDateTime,
+          isBreaking: data.isBreaking, // Include isBreaking
       };
 
       if (isEditing && headline?.id) {
         await updateHeadlineAction(headline.id, headlineData);
         toast({ title: t('headlineUpdatedTitle'), description: t('headlineUpdatedDesc') });
       } else {
+        // Pass the complete data including isBreaking
         await createHeadlineAction(headlineData);
         toast({ title: t('headlineCreatedTitle'), description: t('headlineCreatedDesc') });
       }
-      onClose(); // Close modal on success
-       // Optionally trigger data refresh here
+      onClose();
     } catch (error) {
       console.error("Error saving headline:", error);
       toast({
@@ -175,6 +202,24 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories }: H
             <Textarea id="subtitle" {...register('subtitle')} />
           </div>
 
+           {/* Rich Text Editor Placeholder */}
+           <div>
+                <Label htmlFor="content">{t('content')}</Label>
+                <Controller
+                    name="content"
+                    control={control}
+                    render={({ field }) => (
+                        <RichTextEditor
+                            id="content"
+                            value={field.value || ''}
+                            onChange={field.onChange}
+                            aria-invalid={errors.content ? "true" : "false"}
+                        />
+                    )}
+                />
+                {errors.content && <p className="text-sm text-destructive mt-1">{errors.content.message}</p>}
+            </div>
+
            {/* Category Selection */}
            <div>
              <Label>{t('categories')}</Label>
@@ -183,7 +228,9 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories }: H
                control={control}
                render={({ field }) => (
                  <div className="space-y-2 mt-1 border p-3 rounded-md max-h-32 overflow-y-auto">
-                   {categories.map((category) => (
+                   {categories
+                     .filter(cat => cat.id !== 'breaking') // Exclude 'breaking' from manual selection if it's automatically handled
+                     .map((category) => (
                      <div key={category.id} className="flex items-center space-x-2 space-x-reverse">
                        <Checkbox
                          id={`category-${category.id}`}
@@ -253,26 +300,47 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories }: H
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="displayLines">{t('displayLines')}</Label>
-             <Controller
-                 name="displayLines"
-                 control={control}
-                 render={({ field }) => (
-                    <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}>
-                        <SelectTrigger id="displayLines" className="w-[120px]">
-                           <SelectValue placeholder={t('selectLines')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {[1, 2, 3].map(lines => (
-                                <SelectItem key={lines} value={String(lines)}>{lines} {lines === 1 ? t('line') : t('lines')}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                 )}
-             />
-            {errors.displayLines && <p className="text-sm text-destructive mt-1">{errors.displayLines.message}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+             {/* Display Lines */}
+            <div>
+                <Label htmlFor="displayLines">{t('displayLines')}</Label>
+                <Controller
+                    name="displayLines"
+                    control={control}
+                    render={({ field }) => (
+                        <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}>
+                            <SelectTrigger id="displayLines" className="w-[120px]">
+                            <SelectValue placeholder={t('selectLines')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {[1, 2, 3].map(lines => (
+                                    <SelectItem key={lines} value={String(lines)}>{lines} {lines === 1 ? t('line') : t('lines')}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                />
+                {errors.displayLines && <p className="text-sm text-destructive mt-1">{errors.displayLines.message}</p>}
+            </div>
+
+             {/* Is Breaking Checkbox */}
+            <div className="flex items-center space-x-2 pt-6">
+                 <Controller
+                    name="isBreaking"
+                    control={control}
+                    render={({ field }) => (
+                        <Checkbox
+                            id="isBreaking"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                        />
+                    )}
+                 />
+               <Label htmlFor="isBreaking" className="font-normal">{t('isBreaking')}</Label>
+               {errors.isBreaking && <p className="text-sm text-destructive mt-1">{errors.isBreaking.message}</p>}
+            </div>
           </div>
+
 
            {/* Publish Date and Time */}
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -343,7 +411,12 @@ export function HeadlineEditorModal({ isOpen, onClose, headline, categories }: H
                mainTitle={watchedValues.mainTitle || ''}
                subtitle={watchedValues.subtitle || ''}
                displayLines={watchedValues.displayLines || 2}
+               isBreaking={watchedValues.isBreaking} // Pass breaking status to preview
             />
+             {/* Add preview for rich text content here if needed */}
+             {/* <div className="prose dark:prose-invert max-w-none">
+                <div dangerouslySetInnerHTML={{ __html: watchedValues.content || '<p>Content preview...</p>' }} />
+             </div> */}
         </div>
       </DialogContent>
     </Dialog>

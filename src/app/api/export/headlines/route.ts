@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getHeadlines, getCategories } from '@/services/headline'; // Adjust path as needed
-import type { Headline, HeadlineState, Category } from '@/services/headline';
+import type { Headline, HeadlineState, Category, HeadlineFilters } from '@/services/headline'; // Import HeadlineFilters
 import { format } from 'date-fns';
 
 
@@ -22,6 +22,8 @@ function convertToCSV(data: Headline[], categoryMap: Map<string, string>): strin
     'Display Lines',
     'Publish Date',
     'Publish Time',
+    'Is Breaking', // Added header
+    'Order', // Added header
   ];
 
   // Map data to CSV rows
@@ -35,6 +37,8 @@ function convertToCSV(data: Headline[], categoryMap: Map<string, string>): strin
     headline.displayLines,
     format(headline.publishDate, 'yyyy-MM-dd'),
     format(headline.publishDate, 'HH:mm'),
+    headline.isBreaking ? 'Yes' : 'No', // Added value
+    headline.order, // Added value
   ]);
 
   // Combine headers and rows
@@ -56,38 +60,46 @@ Priority: ${headline.priority}
 Display Lines: ${headline.displayLines}
 Publish Date: ${format(headline.publishDate, 'yyyy-MM-dd')}
 Publish Time: ${format(headline.publishDate, 'HH:mm')}
+Breaking News: ${headline.isBreaking ? 'Yes' : 'No'}
+Order: ${headline.order}
 -----------------------------------
   `).join('\n').trim();
 }
 
-// TODO: Implement convertToTxtMultiple if needed (requires zipping files or similar)
-// function convertToTxtMultiple(data: Headline[], categoryMap: Map<string, string>): ??? {
-//   // This would likely involve creating multiple file contents and potentially zipping them.
-//   // The response format would need careful consideration (e.g., zip file).
-// }
+// Placeholder for multiple file TXT export
+// function convertToTxtMultiple(data: Headline[], categoryMap: Map<string, string>): ??? { ... }
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const formatParam = (searchParams.get('format') || 'csv') as 'csv' | 'txt';
     const txtModeParam = (searchParams.get('txtMode') || 'single') as 'single' | 'multiple';
-    const statesParam = searchParams.get('states'); // Comma-separated list of states
-    const searchParam = searchParams.get('search'); // Get search term if present
+    const statesParam = searchParams.get('states');
+    const searchParam = searchParams.get('search');
+    const idsParam = searchParams.get('ids'); // Get specific IDs if present
+    const isBreakingParam = searchParams.get('isBreaking'); // Optional: Filter by breaking status
 
-    const exportStates = statesParam
+    const exportIds = idsParam ? idsParam.split(',') : undefined;
+
+    // Default states only apply if not exporting specific IDs
+    const exportStates = !exportIds && statesParam
       ? statesParam.split(',').filter(s => ALL_HEADLINE_STATES.includes(s as HeadlineState)) as HeadlineState[]
-      : ['Approved']; // Default to 'Approved' if not specified or invalid
+      : (!exportIds ? ['Approved'] : undefined); // Default to 'Approved' only if no IDs and no states given
 
-    if (exportStates.length === 0) {
-      return new NextResponse('No valid states provided for export', { status: 400 });
+    if (!exportIds && (!exportStates || exportStates.length === 0)) {
+      return new NextResponse('No valid states provided for export, and no specific IDs requested.', { status: 400 });
     }
 
-     // Fetch all headlines matching the specified states and search term (no pagination for export)
-     const filters = {
-       states: exportStates,
-       search: searchParam || undefined, // Pass search term
+     // Build filters for getHeadlines
+     const filters: HeadlineFilters = {
+         ids: exportIds,
+         states: exportStates,
+         search: searchParam || undefined,
+         isBreaking: isBreakingParam !== null ? isBreakingParam === 'true' : undefined, // Convert string to boolean if present
      };
-     const { headlines, totalCount } = await getHeadlines(filters, 0, 0); // Fetch all matching
+
+     // Fetch all matching headlines (no pagination for export)
+     const { headlines } = await getHeadlines(filters, 0, 0);
      const categories = await getCategories();
      const categoryMap = new Map(categories.map(cat => [cat.id, cat.name]));
 
@@ -95,27 +107,28 @@ export async function GET(request: NextRequest) {
     let responseData: string;
     let contentType: string;
     let filename: string;
+    const timestamp = format(new Date(), 'yyyyMMddHHmm');
+    const baseFilename = exportIds ? `headlines_selection_${timestamp}` : `headlines_${(exportStates || ['all']).join('_')}_${timestamp}`;
 
     if (formatParam === 'txt') {
       if (txtModeParam === 'single') {
         responseData = convertToTxtSingle(headlines, categoryMap);
         contentType = 'text/plain; charset=utf-8';
-        filename = `headlines_${exportStates.join('_')}.txt`;
+        filename = `${baseFilename}.txt`;
       } else {
-        // Placeholder for multiple file export (e.g., zip)
          return new NextResponse('Multiple file TXT export not yet implemented', { status: 501 });
         // responseData = convertToTxtMultiple(headlines, categoryMap); // Hypothetical
         // contentType = 'application/zip';
-        // filename = `headlines_${exportStates.join('_')}.zip`;
+        // filename = `${baseFilename}.zip`;
       }
     } else { // Default to CSV
       responseData = convertToCSV(headlines, categoryMap);
       contentType = 'text/csv; charset=utf-8';
-      filename = `headlines_${exportStates.join('_')}.csv`;
+      filename = `${baseFilename}.csv`;
     }
 
     // Ensure filename is safe
-    filename = filename.replace(/[^a-z0-9_.-]/gi, '_');
+    filename = filename.replace(/[^a-z0-9_.-]/gi, '_').replace(/__/g, '_');
 
 
     // Create a response with the data and appropriate headers
@@ -123,9 +136,8 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${filename}"`, // Suggest filename for download
-         // Add cache control headers to prevent caching of dynamic exports
-         'Cache-Control': 'no-store, max-age=0',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store, max-age=0',
       },
     });
 

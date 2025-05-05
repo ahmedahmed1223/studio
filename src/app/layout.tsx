@@ -1,47 +1,65 @@
-'use client'; // Make this a client component to use the hook
 
-import React, { useEffect } from 'react'; // Import React
+'use client';
+
+import React, { useEffect } from 'react';
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google'; // Using Inter for a modern feel
+import { Inter } from 'next/font/google';
 import './globals.css';
+import '@hello-pangea/dnd/reset.css'; // Import dnd reset styles
 import { Toaster } from "@/components/ui/toaster";
-import { LanguageProvider, useLanguage } from '@/context/language-context'; // Import useLanguage
-import { SettingsProvider } from '@/context/settings-context'; // Import SettingsProvider
+import { LanguageProvider, useLanguage } from '@/context/language-context';
+import { SettingsProvider, useSettings } from '@/context/settings-context'; // Import useSettings
 import { Header } from '@/components/layout/header';
 import { cn } from '@/lib/utils';
-import { useSettings } from '@/context/settings-context';
-
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
-// Note: Metadata defined here might not be fully dynamic based on language/direction
-// if the entire layout is client-rendered. Consider alternative approaches if needed.
-// export const metadata: Metadata = {
-//   title: 'Headline Hub',
-//   description: 'Manage your headlines efficiently.',
-// };
-
-// Inner component to consume context and apply to HTML tag
+// Client component to apply dynamic attributes/styles to body/html
 function HtmlBody({ children }: { children: React.ReactNode }) {
   const { language, direction } = useLanguage();
-  const { font, theme, background, foreground } = useSettings().settings;
+  const { settings } = useSettings(); // Get settings
 
-  // Apply lang/dir to HTML tag via useEffect, as we can't directly modify it here easily
-  // in a Client Component wrapping the entire structure.
-  // This ensures the attributes are set after mount.
-  useEffect(() => { // Use imported useEffect
+  useEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = direction;
-  }, [language, direction]);
+    // Apply theme class
+    document.documentElement.classList.remove('light', 'dark');
+    if (settings.theme !== 'custom') {
+      document.documentElement.classList.add(settings.theme);
+    }
+    // Apply font size class
+    document.body.classList.remove('text-sm', 'text-base', 'text-lg'); // Assuming Tailwind base is 'text-base'
+    switch(settings.fontSize) {
+        case 'small': document.body.classList.add('text-sm'); break;
+        case 'large': document.body.classList.add('text-lg'); break;
+        default: document.body.classList.add('text-base'); // Medium or default
+    }
+    // Apply font family style
+    document.body.style.fontFamily = `${settings.font}, sans-serif`; // Add fallback
+
+    // Apply custom colors using CSS variables (if theme is custom)
+    if (settings.theme === 'custom') {
+      // Ensure HSL values are correctly formatted for CSS
+      // Basic validation/formatting can be added here
+      document.documentElement.style.setProperty('--background', settings.background);
+      document.documentElement.style.setProperty('--foreground', settings.foreground);
+      // Reset other theme variables or define them based on background/foreground if needed
+    } else {
+       // Clear custom properties if not in custom theme
+        document.documentElement.style.removeProperty('--background');
+        document.documentElement.style.removeProperty('--foreground');
+    }
+
+  }, [language, direction, settings]); // Rerun effect when language, direction, or settings change
 
   return (
+    // Use cn for base classes + inter variable, dynamic classes/styles applied via useEffect
     <body className={cn("min-h-screen bg-background font-sans antialiased", inter.variable)}>
       <div className="relative flex min-h-screen flex-col">
         <Header />
         <main className="flex-1 container mx-auto px-4 py-8">
           {children}
         </main>
-        {/* Footer can be added here if needed */}
       </div>
       <Toaster />
     </body>
@@ -56,16 +74,9 @@ export default function RootLayout({
 }>) {
   return (
     <LanguageProvider>
-      <SettingsProvider> {/* Wrap with SettingsProvider */}
-        {/* The LanguageProvider now wraps the content directly */}
-        {/* We need a client component *inside* the provider to use the hook */}
-        {/* We still need the <html> tag */}
+      <SettingsProvider>
+        {/* No need for static lang/dir on <html> - handled by effect in HtmlBody */}
         <html>
-            {/*
-                The `lang` and `dir` attributes will be set by the HtmlBody component's effect.
-                Setting initial static values might cause hydration mismatches if localStorage differs.
-                Letting the effect handle it is safer for client components modifying the root HTML element.
-            */}
             <HtmlBody>
                 {children}
             </HtmlBody>
@@ -74,4 +85,3 @@ export default function RootLayout({
     </LanguageProvider>
   );
 }
-
