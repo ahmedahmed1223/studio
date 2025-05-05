@@ -25,7 +25,36 @@
       "name": "Breaking News"
     }
   ],
-  "headlines": [],
-  "nextHeadlineId": 1,
+  "headlines": [
+    {
+      "mainTitle": "استشهاد خمسة مواطنين وإصابة آخرين نتيجة قصف صهيوني على منزل لعائلة ",
+      "subtitle": "",
+      "categories": [
+        "breaking"
+      ],
+      "state": "Draft",
+      "priority": "Normal",
+      "displayLines": 1,
+      "publishDate": "2025-05-05T15:43:00.000Z",
+      "isBreaking": true,
+      "id": "headline-1",
+      "order": 0
+    },
+    {
+      "mainTitle": "استشهاد خمسة مواطنين وإصابة آخرين نتيجة قصف صهيوني على منزل لعائلة ",
+      "subtitle": "",
+      "categories": [
+        "tech"
+      ],
+      "state": "Draft",
+      "priority": "Normal",
+      "displayLines": 2,
+      "publishDate": "2025-05-05T15:48:00.000Z",
+      "isBreaking": false,
+      "id": "headline-2",
+      "order": 1
+    }
+  ],
+  "nextHeadlineId": 3,
   "nextCategoryId": 7
 }
