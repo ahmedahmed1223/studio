@@ -14,44 +14,75 @@ import {
 } from '@/services/headline';
 import { z } from 'zod';
 
-// Define Zod schema matching the data structure for creation/update
-// Reusing parts of the schema defined in the modal
+/**
+ * Zod schema for validating headline data during creation and update actions.
+ */
 const headlineActionSchema = z.object({
-  mainTitle: z.string().min(1),
+  mainTitle: z.string().min(1, "Main title cannot be empty"),
   subtitle: z.string(),
-  categories: z.array(z.string()).min(1),
+  // content: z.string().optional(), // Uncomment if rich text content is added
+  categories: z.array(z.string()).min(1, "At least one category is required"),
   state: z.enum(['Draft', 'In Review', 'Approved', 'Archived']),
   priority: z.enum(['High', 'Normal']),
   displayLines: z.number().min(1).max(3),
   publishDate: z.date(),
-  isBreaking: z.boolean().optional(), // Added isBreaking
+  isBreaking: z.boolean().default(false), // Default to false if not provided
 });
 
-// Type for the data expected by create action (order is handled by service)
-type HeadlineCreateData = Omit<Headline, 'id' | 'order'>;
-// Type for the data expected by update action (order is handled by reorder action)
-type HeadlineUpdateData = Partial<Omit<Headline, 'id' | 'order'>>;
+/**
+ * Type representing the data required to create a new headline.
+ * Excludes 'id' and 'order' as they are handled by the service.
+ */
+export type HeadlineCreateData = z.infer<typeof headlineActionSchema>;
+
+/**
+ * Type representing the data allowed for updating an existing headline.
+ * Allows partial updates and excludes 'id' and 'order'.
+ */
+export type HeadlineUpdateData = Partial<HeadlineCreateData>;
 
 
+/**
+ * Server action to create a new headline.
+ * Validates the input data using `headlineActionSchema`.
+ * Calls the `createHeadlineService` and revalidates relevant paths.
+ *
+ * @param data - The data for the new headline (conforming to `HeadlineCreateData`).
+ * @returns An object indicating success and the ID of the new headline.
+ * @throws {Error} If validation fails or the service call encounters an error.
+ */
 export async function createHeadlineAction(data: HeadlineCreateData) {
   // Validate data using Zod schema (excluding order)
   const validationResult = headlineActionSchema.safeParse(data);
   if (!validationResult.success) {
     console.error("Validation failed:", validationResult.error.flatten());
-    throw new Error('Invalid headline data provided.');
+    // Flatten errors for potentially better client-side display
+    const errors = validationResult.error.flatten().fieldErrors;
+    const errorMessages = Object.values(errors).flat().join(', ');
+    throw new Error(`Invalid headline data: ${errorMessages}`);
   }
 
   try {
     const newHeadlineId = await createHeadlineService(validationResult.data);
-    revalidatePath('/dashboard'); // Revalidate the dashboard page cache
-    revalidatePath('/breaking-news'); // Revalidate breaking news if relevant
+    revalidatePath('/dashboard'); // Revalidate the main headline list
+    revalidatePath('/breaking-news'); // Revalidate the breaking news list
     return { success: true, id: newHeadlineId };
   } catch (error) {
     console.error('Failed to create headline:', error);
-    throw new Error('Failed to create headline.');
+    throw new Error('Failed to create headline.'); // Rethrow a generic error
   }
 }
 
+/**
+ * Server action to update an existing headline.
+ * Validates the input data using a partial version of `headlineActionSchema`.
+ * Calls the `updateHeadlineService` and revalidates relevant paths.
+ *
+ * @param id - The ID of the headline to update.
+ * @param data - The partial data for the headline update (conforming to `HeadlineUpdateData`).
+ * @returns An object indicating success.
+ * @throws {Error} If validation fails or the service call encounters an error.
+ */
 export async function updateHeadlineAction(id: string, data: HeadlineUpdateData) {
  // Partially validate data: Allow partial updates but ensure types are correct (excluding order)
   const partialSchema = headlineActionSchema.partial();
@@ -59,14 +90,20 @@ export async function updateHeadlineAction(id: string, data: HeadlineUpdateData)
 
   if (!validationResult.success) {
     console.error("Validation failed:", validationResult.error.flatten());
-    throw new Error('Invalid headline data provided for update.');
+    const errors = validationResult.error.flatten().fieldErrors;
+    const errorMessages = Object.values(errors).flat().join(', ');
+    throw new Error(`Invalid headline update data: ${errorMessages}`);
+  }
+  if (Object.keys(validationResult.data).length === 0) {
+    // No actual data fields were provided for update
+    return { success: true, message: 'No changes provided.' };
   }
 
   try {
     await updateHeadlineService(id, validationResult.data);
-    revalidatePath('/dashboard'); // Revalidate the dashboard page cache
-    revalidatePath('/breaking-news'); // Revalidate breaking news if relevant
-    revalidatePath(`/headlines/${id}`); // If there's a detail page
+    revalidatePath('/dashboard');
+    revalidatePath('/breaking-news');
+    revalidatePath(`/headlines/${id}`); // If a detail page exists
     return { success: true };
   } catch (error) {
     console.error('Failed to update headline:', error);
@@ -74,6 +111,15 @@ export async function updateHeadlineAction(id: string, data: HeadlineUpdateData)
   }
 }
 
+/**
+ * Server action to delete a headline.
+ * Validates the headline ID.
+ * Calls the `deleteHeadlineService` and revalidates relevant paths.
+ *
+ * @param id - The ID of the headline to delete.
+ * @returns An object indicating success.
+ * @throws {Error} If the ID is invalid or the service call encounters an error.
+ */
 export async function deleteHeadlineAction(id: string) {
   // Basic validation for ID
   if (!id || typeof id !== 'string') {
@@ -82,7 +128,7 @@ export async function deleteHeadlineAction(id: string) {
 
   try {
     await deleteHeadlineService(id);
-    revalidatePath('/dashboard'); // Revalidate the dashboard page cache
+    revalidatePath('/dashboard');
     revalidatePath('/breaking-news');
     return { success: true };
   } catch (error) {
@@ -93,12 +139,17 @@ export async function deleteHeadlineAction(id: string) {
 
 /**
  * Server action to reorder headlines.
- * @param orderedIds An array of headline IDs in the desired new order.
+ * Validates the input array of ordered IDs.
+ * Calls the `reorderHeadlinesService` and revalidates relevant paths.
+ *
+ * @param orderedIds - An array of headline IDs in the desired new order.
+ * @returns An object indicating success.
+ * @throws {Error} If the input is invalid or the service call encounters an error.
  */
 export async function reorderHeadlinesAction(orderedIds: string[]) {
     // Basic validation
     if (!Array.isArray(orderedIds) || orderedIds.some(id => typeof id !== 'string')) {
-        throw new Error('Invalid data provided for reordering.');
+        throw new Error('Invalid data provided for reordering. Expected an array of strings.');
     }
 
     try {
@@ -115,11 +166,16 @@ export async function reorderHeadlinesAction(orderedIds: string[]) {
 
 /**
  * Server action to delete multiple headlines.
- * @param ids Array of headline IDs to delete.
+ * Validates the input array of IDs.
+ * Calls the `deleteMultipleHeadlinesService` and revalidates relevant paths.
+ *
+ * @param ids - Array of headline IDs to delete.
+ * @returns An object indicating success.
+ * @throws {Error} If the input is invalid or the service call encounters an error.
  */
 export async function deleteMultipleHeadlinesAction(ids: string[]) {
     if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string')) {
-        throw new Error('Invalid IDs provided for deletion.');
+        throw new Error('Invalid IDs provided for deletion. Expected an array of strings.');
     }
      if (ids.length === 0) {
         return { success: true, message: 'No headlines selected for deletion.' }; // Nothing to do
@@ -138,15 +194,22 @@ export async function deleteMultipleHeadlinesAction(ids: string[]) {
 
 /**
  * Server action to update the state of multiple headlines.
- * @param ids Array of headline IDs to update.
- * @param state The new state to set.
+ * Validates the input array of IDs and the target state.
+ * Calls the `updateMultipleHeadlineStatesService` and revalidates relevant paths.
+ *
+ * @param ids - Array of headline IDs to update.
+ * @param state - The new `HeadlineState` to set for the selected headlines.
+ * @returns An object indicating success.
+ * @throws {Error} If the input is invalid or the service call encounters an error.
  */
 export async function updateMultipleHeadlineStatesAction(ids: string[], state: HeadlineState) {
      if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string')) {
-        throw new Error('Invalid IDs provided for state update.');
+        throw new Error('Invalid IDs provided for state update. Expected an array of strings.');
     }
-    if (!['Draft', 'In Review', 'Approved', 'Archived'].includes(state)) {
-         throw new Error('Invalid state provided.');
+    // Validate the state value against the allowed HeadlineState enum/type
+    const validStates: HeadlineState[] = ['Draft', 'In Review', 'Approved', 'Archived'];
+    if (!validStates.includes(state)) {
+         throw new Error(`Invalid state provided: ${state}. Must be one of ${validStates.join(', ')}.`);
     }
      if (ids.length === 0) {
         return { success: true, message: 'No headlines selected for state update.' };
@@ -163,3 +226,4 @@ export async function updateMultipleHeadlineStatesAction(ids: string[], state: H
         throw new Error('Failed to update headline states.');
     }
 }
+

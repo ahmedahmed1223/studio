@@ -1,81 +1,127 @@
 'use client';
 
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, ReactNode } from 'react';
 import enTranslations from '@/locales/en.json';
 import arTranslations from '@/locales/ar.json';
 
+/**
+ * Defines the possible language codes supported by the application.
+ */
 type Language = 'en' | 'ar';
+
+/**
+ * Defines the possible text directions.
+ */
 type Direction = 'ltr' | 'rtl';
 
+/**
+ * Interface for the Language Context, providing language state and control functions.
+ */
 interface LanguageContextProps {
+  /** The currently selected language code ('en' or 'ar'). */
   language: Language;
+  /** The current text direction ('ltr' or 'rtl'). */
   direction: Direction;
+  /** Function to set the application language and corresponding direction. */
   setLanguage: (lang: Language) => void;
+  /** Function to toggle the text direction between 'ltr' and 'rtl'. */
   toggleDirection: () => void;
-  t: (key: string, params?: Record<string, string | number>) => string; // Translation function
+  /** Translation function to get localized strings. */
+  t: (key: string, params?: Record<string, string | number>) => string;
 }
 
+/**
+ * React Context for managing language and direction settings.
+ */
 const LanguageContext = createContext<LanguageContextProps | undefined>(undefined);
 
+/**
+ * Dictionary mapping language codes to their corresponding translation files.
+ */
 const translations: Record<Language, Record<string, string>> = {
   en: enTranslations,
   ar: arTranslations,
 };
 
-export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>('en'); // Default to English
-  const [direction, setDirection] = useState<Direction>('ltr'); // Default to LTR
+/**
+ * Provides the LanguageContext to its children components.
+ * Manages the language and direction state, loading/saving preferences from localStorage,
+ * and applying settings to the document element.
+ */
+export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Default to Arabic ('ar') and Right-to-Left ('rtl')
+  const [language, setLanguageState] = useState<Language>('ar');
+  const [direction, setDirection] = useState<Direction>('rtl');
 
-  // Load language/direction preference from localStorage on mount
+  // Load language/direction preference from localStorage on component mount (client-side only)
   useEffect(() => {
-    const storedLang = localStorage.getItem('appLanguage') as Language | null;
-    const storedDir = localStorage.getItem('appDirection') as Direction | null;
+    if (typeof window !== 'undefined') {
+      const storedLang = localStorage.getItem('appLanguage') as Language | null;
+      const storedDir = localStorage.getItem('appDirection') as Direction | null;
 
-    let initialLang = 'en' as Language;
-    let initialDir = 'ltr' as Direction;
+      let initialLang: Language = 'ar'; // Default language
+      let initialDir: Direction = 'rtl'; // Default direction
 
-    if (storedLang && ['en', 'ar'].includes(storedLang)) {
-      initialLang = storedLang;
-      initialDir = storedLang === 'ar' ? 'rtl' : 'ltr'; // Set direction based on stored language first
-    } else {
-       // Optionally detect browser language preference here
-       // For now, stick with 'en'/'ltr' default
+      // Use stored language if valid, otherwise use default
+      if (storedLang && ['en', 'ar'].includes(storedLang)) {
+        initialLang = storedLang;
+        initialDir = storedLang === 'ar' ? 'rtl' : 'ltr'; // Base direction on stored language first
+      }
+
+      // Override direction if specifically stored and valid, otherwise use language-based default
+      if (storedDir && ['ltr', 'rtl'].includes(storedDir)) {
+        initialDir = storedDir;
+      }
+
+      // Apply initial settings
+      setLanguageState(initialLang);
+      setDirection(initialDir);
+      document.documentElement.lang = initialLang;
+      document.documentElement.dir = initialDir;
     }
+  }, []); // Empty dependency array ensures this runs only once on mount
 
-    // Override direction if specifically stored
-    if (storedDir && ['ltr', 'rtl'].includes(storedDir)) {
-      initialDir = storedDir;
+  /**
+   * Sets the application language and updates the direction accordingly.
+   * Saves the new settings to localStorage and updates the document element.
+   * @param lang - The new language code ('en' or 'ar').
+   */
+  const setLanguage = useCallback((lang: Language) => {
+    if (typeof window !== 'undefined') {
+      setLanguageState(lang);
+      const newDir = lang === 'ar' ? 'rtl' : 'ltr';
+      setDirection(newDir);
+      localStorage.setItem('appLanguage', lang);
+      localStorage.setItem('appDirection', newDir); // Store direction tied to language change
+      document.documentElement.lang = lang;
+      document.documentElement.dir = newDir;
     }
-
-    setLanguageState(initialLang);
-    setDirection(initialDir);
-    // Apply initial settings to the document element
-    document.documentElement.lang = initialLang;
-    document.documentElement.dir = initialDir;
-
-
   }, []);
 
-  const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
-    const newDir = lang === 'ar' ? 'rtl' : 'ltr';
-    setDirection(newDir);
-    localStorage.setItem('appLanguage', lang);
-    localStorage.setItem('appDirection', newDir); // Also store direction tied to language change
-    document.documentElement.lang = lang;
-    document.documentElement.dir = newDir;
-  };
+  /**
+   * Toggles the text direction between 'ltr' and 'rtl'.
+   * Saves the new direction to localStorage and updates the document element.
+   */
+  const toggleDirection = useCallback(() => {
+     if (typeof window !== 'undefined') {
+       const newDirection = direction === 'ltr' ? 'rtl' : 'ltr';
+       setDirection(newDirection);
+       localStorage.setItem('appDirection', newDirection);
+       document.documentElement.dir = newDirection;
+     }
+  }, [direction]);
 
-  const toggleDirection = () => {
-    const newDirection = direction === 'ltr' ? 'rtl' : 'ltr';
-    setDirection(newDirection);
-    localStorage.setItem('appDirection', newDirection);
-    document.documentElement.dir = newDirection;
-  };
-
-  // Translation function
+  /**
+   * Retrieves a translated string for the given key based on the current language.
+   * Replaces placeholders (e.g., `{count}`) with provided parameter values.
+   * Falls back to the key itself if the translation is not found.
+   *
+   * @param key - The translation key (from en.json or ar.json).
+   * @param params - Optional object containing key-value pairs for placeholder replacement.
+   * @returns The translated string or the original key if not found.
+   */
   const t = useCallback((key: string, params?: Record<string, string | number>): string => {
-    let translation = translations[language]?.[key] || key; // Fallback to key if translation not found
+    let translation = translations[language]?.[key] || key; // Fallback to key
 
     // Replace placeholders like {count}
     if (params) {
@@ -86,7 +132,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     return translation;
-  }, [language]);
+  }, [language]); // Dependency: re-run only when language changes
 
 
   return (
@@ -96,6 +142,11 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 };
 
+/**
+ * Custom hook to access the LanguageContext.
+ * Throws an error if used outside of a LanguageProvider.
+ * @returns The LanguageContextProps object containing language state and functions.
+ */
 export const useLanguage = (): LanguageContextProps => {
   const context = useContext(LanguageContext);
   if (!context) {
@@ -103,3 +154,4 @@ export const useLanguage = (): LanguageContextProps => {
   }
   return context;
 };
+

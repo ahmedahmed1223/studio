@@ -5,9 +5,20 @@ import { revalidatePath } from 'next/cache';
 import { createCategory, updateCategory, deleteCategory } from '@/services/headline';
 import { z } from 'zod';
 
-// Define Zod schema for category actions
+/**
+ * Zod schema for validating category names.
+ * Ensures the name is a non-empty string with a maximum length of 50 characters.
+ */
 const categoryNameSchema = z.string().min(1, { message: "Category name is required" }).max(50, { message: "Category name cannot exceed 50 characters" });
 
+/**
+ * Server action to create a new category.
+ * Validates the category name and calls the corresponding service function.
+ * Revalidates relevant paths after successful creation.
+ *
+ * @param name - The name of the new category.
+ * @returns An object indicating success or failure, including potential validation errors or the new category object.
+ */
 export async function createCategoryAction(name: string) {
   const validationResult = categoryNameSchema.safeParse(name);
   if (!validationResult.success) {
@@ -27,6 +38,15 @@ export async function createCategoryAction(name: string) {
   }
 }
 
+/**
+ * Server action to update an existing category.
+ * Validates the category ID and the new name.
+ * Revalidates relevant paths after successful update.
+ *
+ * @param id - The ID of the category to update.
+ * @param name - The new name for the category.
+ * @returns An object indicating success or failure, including potential validation errors.
+ */
 export async function updateCategoryAction(id: string, name: string) {
   // Validate ID and name
   if (!id || typeof id !== 'string') {
@@ -51,6 +71,14 @@ export async function updateCategoryAction(id: string, name: string) {
   }
 }
 
+/**
+ * Server action to delete a category.
+ * Validates the category ID.
+ * Revalidates relevant paths after successful deletion.
+ *
+ * @param id - The ID of the category to delete.
+ * @returns An object indicating success or failure, including potential errors.
+ */
 export async function deleteCategoryAction(id: string) {
   if (!id || typeof id !== 'string') {
      return { success: false, errors: ['Invalid category ID provided.'] };
@@ -67,3 +95,4 @@ export async function deleteCategoryAction(id: string) {
      return { success: false, errors: [error.message || 'Failed to delete category.'] };
   }
 }
+

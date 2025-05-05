@@ -8,16 +8,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PlusCircle, Edit, Trash2, Save, X } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from '@/context/language-context';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+// Removed AlertDialog imports
+// import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { createCategoryAction, updateCategoryAction, deleteCategoryAction } from '@/actions/category-actions';
 import type { Category } from '@/services/headline';
+import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton for loading state
 
 interface CategoryManagerProps {
   categories: Category[];
   onCategoriesUpdate: () => void; // Callback to refresh categories list in parent
+  isLoading?: boolean; // Optional prop to indicate loading state
+  error?: string | null; // Optional prop to show error message
 }
 
-export function CategoryManager({ categories, onCategoriesUpdate }: CategoryManagerProps) {
+export function CategoryManager({ categories, onCategoriesUpdate, isLoading = false, error = null }: CategoryManagerProps) {
   const { t } = useLanguage();
   const { toast } = useToast();
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -28,16 +32,17 @@ export function CategoryManager({ categories, onCategoriesUpdate }: CategoryMana
   const [isDeleting, setIsDeleting] = useState<string | null>(null); // Store ID of category being deleted
 
   const handleAddCategory = async () => {
-    if (!newCategoryName.trim()) {
+    const trimmedName = newCategoryName.trim();
+    if (!trimmedName) {
         toast({ title: t('error'), description: t('categoryNameRequired'), variant: 'destructive' });
         return;
     }
     setIsAdding(true);
-    const result = await createCategoryAction(newCategoryName.trim());
+    const result = await createCategoryAction(trimmedName);
     setIsAdding(false);
 
-    if (result.success) {
-      toast({ title: t('categoryCreatedTitle'), description: t('categoryCreatedDesc', { name: newCategoryName.trim() }) });
+    if (result.success && result.category) {
+      toast({ title: t('categoryCreatedTitle'), description: t('categoryCreatedDesc', { name: result.category.name }) });
       setNewCategoryName('');
       onCategoriesUpdate(); // Refresh list
     } else {
@@ -56,16 +61,24 @@ export function CategoryManager({ categories, onCategoriesUpdate }: CategoryMana
   };
 
   const handleSaveEdit = async (id: string) => {
-     if (!editingCategoryName.trim()) {
+     const trimmedName = editingCategoryName.trim();
+     if (!trimmedName) {
         toast({ title: t('error'), description: t('categoryNameRequired'), variant: 'destructive' });
         return;
      }
+     // Prevent saving if name hasn't changed
+     const originalCategory = categories.find(cat => cat.id === id);
+     if (originalCategory && originalCategory.name === trimmedName) {
+         handleCancelEdit(); // Just close the edit UI
+         return;
+     }
+
      setIsEditing(true);
-     const result = await updateCategoryAction(id, editingCategoryName.trim());
+     const result = await updateCategoryAction(id, trimmedName);
      setIsEditing(false);
 
      if (result.success) {
-        toast({ title: t('categoryUpdatedTitle'), description: t('categoryUpdatedDesc', { name: editingCategoryName.trim() }) });
+        toast({ title: t('categoryUpdatedTitle'), description: t('categoryUpdatedDesc', { name: trimmedName }) });
         setEditingCategoryId(null);
         setEditingCategoryName('');
         onCategoriesUpdate(); // Refresh list
@@ -75,34 +88,58 @@ export function CategoryManager({ categories, onCategoriesUpdate }: CategoryMana
   };
 
   const handleDeleteCategory = async (id: string) => {
+    // Removed confirmation dialog
     setIsDeleting(id);
     const result = await deleteCategoryAction(id);
-    setIsDeleting(null);
+    setIsDeleting(null); // Reset deleting state regardless of outcome
 
     if (result.success) {
       toast({ title: t('categoryDeletedTitle'), description: t('categoryDeletedDesc') });
       onCategoriesUpdate(); // Refresh list
+       // If the deleted category was being edited, cancel the edit
+      if (editingCategoryId === id) {
+          handleCancelEdit();
+      }
     } else {
        toast({ title: t('error'), description: result.errors?.join(', ') || t('categoryDeleteError'), variant: 'destructive' });
     }
   };
 
+   // Handle Enter key press in input fields
+   const handleAddKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+       if (event.key === 'Enter') {
+           handleAddCategory();
+       }
+   };
+    const handleEditKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, id: string) => {
+        if (event.key === 'Enter') {
+            handleSaveEdit(id);
+        } else if (event.key === 'Escape') {
+            handleCancelEdit();
+        }
+    };
+
   return (
     <div className="space-y-4">
       {/* Add Category Input */}
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <Input
           placeholder={t('newCategoryPlaceholder')}
           value={newCategoryName}
           onChange={(e) => setNewCategoryName(e.target.value)}
-          disabled={isAdding}
+          onKeyDown={handleAddKeyDown}
+          disabled={isAdding || isLoading} // Disable during loading as well
           aria-label={t('newCategoryPlaceholder')}
+          className="flex-grow"
         />
-        <Button onClick={handleAddCategory} disabled={isAdding || !newCategoryName.trim()}>
+        <Button onClick={handleAddCategory} disabled={isAdding || isLoading || !newCategoryName.trim()} className="w-full sm:w-auto">
           <PlusCircle className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
           {isAdding ? t('adding') : t('addCategory')}
         </Button>
       </div>
+
+       {/* Error Display */}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {/* Categories Table */}
       <div className="rounded-md border">
@@ -110,25 +147,44 @@ export function CategoryManager({ categories, onCategoriesUpdate }: CategoryMana
           <TableHeader>
             <TableRow>
               <TableHead>{t('categoryName')}</TableHead>
-              <TableHead className="w-[120px] text-right rtl:text-left">{t('actions')}</TableHead>
+              <TableHead className="w-[100px] text-right rtl:text-left">{t('actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {categories.length === 0 ? (
+             {isLoading ? (
+                 // Loading Skeleton Rows
+                 Array.from({ length: 3 }).map((_, index) => (
+                     <TableRow key={`skeleton-${index}`}>
+                         <TableCell>
+                             <Skeleton className="h-5 w-3/4" />
+                         </TableCell>
+                         <TableCell className="text-right rtl:text-left">
+                              <div className="flex justify-end gap-1 rtl:justify-start">
+                                 <Skeleton className="h-8 w-8" />
+                                 <Skeleton className="h-8 w-8" />
+                             </div>
+                         </TableCell>
+                     </TableRow>
+                 ))
+             ) : categories.length === 0 && !error ? (
+                 // No Categories Found Message
               <TableRow>
-                <TableCell colSpan={2} className="h-24 text-center">
+                <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
                   {t('noCategoriesFound')}
                 </TableCell>
               </TableRow>
             ) : (
+                // Actual Category Rows
               categories.map((category) => (
-                <TableRow key={category.id}>
+                <TableRow key={category.id} className={isDeleting === category.id ? 'opacity-50' : ''}>
                   <TableCell>
                     {editingCategoryId === category.id ? (
                       <Input
                         value={editingCategoryName}
                         onChange={(e) => setEditingCategoryName(e.target.value)}
+                        onKeyDown={(e) => handleEditKeyDown(e, category.id)}
                         disabled={isEditing}
+                        autoFocus // Focus input when editing starts
                         aria-label={t('editCategoryNameLabel', { name: category.name })}
                       />
                     ) : (
@@ -138,43 +194,34 @@ export function CategoryManager({ categories, onCategoriesUpdate }: CategoryMana
                   <TableCell className="text-right rtl:text-left">
                     {editingCategoryId === category.id ? (
                       <div className="flex justify-end gap-1 rtl:justify-start">
-                        <Button variant="ghost" size="icon" onClick={() => handleSaveEdit(category.id)} disabled={isEditing || !editingCategoryName.trim()} aria-label={t('saveCategoryName')}>
+                        <Button variant="ghost" size="icon" onClick={() => handleSaveEdit(category.id)} disabled={isEditing || !editingCategoryName.trim()} aria-label={t('saveCategoryName')} title={t('saveCategoryName')}>
                           <Save className="h-4 w-4 text-primary" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={handleCancelEdit} disabled={isEditing} aria-label={t('cancelEdit')}>
+                        <Button variant="ghost" size="icon" onClick={handleCancelEdit} disabled={isEditing} aria-label={t('cancelEdit')} title={t('cancelEdit')}>
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
                     ) : (
                       <div className="flex justify-end gap-1 rtl:justify-start">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditClick(category)} aria-label={t('editCategory')}>
+                        <Button variant="ghost" size="icon" onClick={() => handleEditClick(category)} aria-label={t('editCategory')} title={t('editCategory')}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                         <AlertDialog>
-                           <AlertDialogTrigger asChild>
-                             <Button variant="ghost" size="icon" disabled={isDeleting === category.id} aria-label={t('deleteCategory')}>
-                               <Trash2 className="h-4 w-4 text-destructive" />
-                             </Button>
-                           </AlertDialogTrigger>
-                           <AlertDialogContent>
-                             <AlertDialogHeader>
-                               <AlertDialogTitle>{t('confirmDeleteCategoryTitle')}</AlertDialogTitle>
-                               <AlertDialogDescription>
-                                 {t('confirmDeleteCategoryDesc', { name: category.name })}
-                               </AlertDialogDescription>
-                             </AlertDialogHeader>
-                             <AlertDialogFooter>
-                               <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
-                               <AlertDialogAction
-                                 onClick={() => handleDeleteCategory(category.id)}
-                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                 disabled={isDeleting === category.id}
-                                >
-                                 {isDeleting === category.id ? t('deleting') : t('deleteConfirm')}
-                               </AlertDialogAction>
-                             </AlertDialogFooter>
-                           </AlertDialogContent>
-                         </AlertDialog>
+                        {/* Removed AlertDialog Trigger */}
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteCategory(category.id)}
+                            disabled={isDeleting === category.id}
+                            aria-label={t('deleteCategory')}
+                            title={t('deleteCategory')}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                         >
+                           {isDeleting === category.id ? (
+                                <span className="animate-spin h-4 w-4 border-b-2 border-current rounded-full"></span> // Simple spinner
+                            ) : (
+                                <Trash2 className="h-4 w-4" />
+                            )}
+                         </Button>
                       </div>
                     )}
                   </TableCell>
@@ -187,3 +234,4 @@ export function CategoryManager({ categories, onCategoriesUpdate }: CategoryMana
     </div>
   );
 }
+
