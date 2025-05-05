@@ -5,7 +5,7 @@ import React, { useEffect } from 'react';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import '@hello-pangea/dnd/reset.css'; // Import dnd reset styles
+// Removed problematic import: import '@hello-pangea/dnd/reset.css';
 import { Toaster } from "@/components/ui/toaster";
 import { LanguageProvider, useLanguage } from '@/context/language-context';
 import { SettingsProvider, useSettings } from '@/context/settings-context'; // Import useSettings
@@ -85,3 +85,4 @@ export default function RootLayout({
     </LanguageProvider>
   );
 }
+

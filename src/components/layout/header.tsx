@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Languages, AlignRight, AlignLeft, Settings, LogOut, Download, Newspaper, AlertTriangle } from 'lucide-react'; // Added Newspaper, AlertTriangle
 import { useLanguage } from '@/context/language-context';
 import { useSettings } from '@/context/settings-context';
+import { Badge } from '@/components/ui/badge'; // Import Badge
 import {
   DropdownMenu,
   DropdownMenuContent,
