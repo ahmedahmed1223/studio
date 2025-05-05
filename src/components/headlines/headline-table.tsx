@@ -1,3 +1,4 @@
+
 // @ts-nocheck comment due to react-beautiful-dnd type issues with React 18 StrictMode
 // Remove the comment above if react-beautiful-dnd updates its types
 'use client';
@@ -72,6 +73,7 @@ const getCategoryColorClass = (categoryId: string | undefined, categories: Categ
     }
 
     // Predefined list of Tailwind utility classes for backgrounds
+    // These classes should exist in your global CSS or be safelisted in tailwind.config.js
     const colorClasses = [
         'bg-blue-50 dark:bg-blue-900/20',
         'bg-green-50 dark:bg-green-900/20',
@@ -80,7 +82,7 @@ const getCategoryColorClass = (categoryId: string | undefined, categories: Categ
         'bg-red-50 dark:bg-red-900/20',
         'bg-indigo-50 dark:bg-indigo-900/20',
         'bg-pink-50 dark:bg-pink-900/20',
-        'bg-gray-50 dark:bg-gray-700/20',
+        'bg-gray-50 dark:bg-gray-700/20', // Use gray-700 for dark mode instead of 900/20 for better visibility maybe
     ];
     const colorIndex = Math.abs(hash) % colorClasses.length;
     return colorClasses[colorIndex];
@@ -297,6 +299,10 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
        // TODO: Retrieve format settings from Settings Context if available, otherwise default.
        params.set('format', 'csv'); // Defaulting to CSV for now
        params.set('ids', idsToExport.join(','));
+       // Optionally add isBreaking filter if needed for context-specific export
+       // if (isBreakingNewsList) {
+       //     params.set('isBreaking', 'true');
+       // }
 
        const exportUrl = `/api/export/headlines?${params.toString()}`;
        window.location.href = exportUrl; // Trigger download
@@ -348,7 +354,13 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
                  variant: 'destructive',
              });
              // Revert local state if backend update fails
-             setHeadlines(initialHeadlines);
+             // Find original data snapshot before optimistic update (might need to store it)
+             // For simplicity here, we might just rely on the next fetch triggered by revalidation.
+             // Or, ideally, the server action failure triggers revalidation which resets the list.
+             // If immediate rollback is needed:
+             // const originalHeadlines = initialHeadlines.find(h => h.id === reorderedItem.id) ? initialHeadlines : headlines /* fallback */;
+             // setHeadlines(originalHeadlines);
+             setHeadlines(initialHeadlines); // Simple revert for now
         }
     };
 
@@ -370,10 +382,10 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
                   <SelectValue placeholder={t('changeStatePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                   <SelectItem value="Approved">{t('setStateTo', { state: t('approved')})}</SelectItem>
-                  <SelectItem value="In Review">{t('setStateTo', { state: t('inreview')})}</SelectItem>
-                  <SelectItem value="Draft">{t('setStateTo', { state: t('draft')})}</SelectItem>
-                  <SelectItem value="Archived">{t('setStateTo', { state: t('archived')})}</SelectItem>
+                   {/* Dynamically generate items based on HeadlineState */}
+                   {(['Approved', 'In Review', 'Draft', 'Archived'] as HeadlineState[]).map(state => (
+                      <SelectItem key={state} value={state}>{t('setStateTo', { state: t(state.toLowerCase().replace(' ', ''))})}</SelectItem>
+                   ))}
               </SelectContent>
           </Select>
            {/* Bulk Export Button */}
@@ -403,13 +415,15 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
                       className="translate-y-[2px]"
                     />
                   </TableHead>
-                  <TableHead className="w-10 sticky left-10 bg-background z-10"></TableHead>{/* Drag Handle */}
+                  {/* Drag Handle Column */}
+                  <TableHead className="w-10 sticky left-10 bg-background z-10"></TableHead>
                   <TableHead className="min-w-[250px]">{t('title')}</TableHead>
                   <TableHead className="hidden md:table-cell min-w-[150px]">{t('category')}</TableHead>
                   <TableHead className="min-w-[100px]">{t('state')}</TableHead>
                   <TableHead className="hidden sm:table-cell min-w-[100px]">{t('priority')}</TableHead>
                   <TableHead className="hidden lg:table-cell min-w-[180px]">{t('publishDate')}</TableHead>
-                  <TableHead className="w-16 sticky right-0 bg-background z-10"><span className="sr-only">{t('actions')}</span></TableHead>{/* Actions */}
+                  {/* Actions Column */}
+                  <TableHead className="w-16 sticky right-0 bg-background z-10"><span className="sr-only">{t('actions')}</span></TableHead>
                 </TableRow>
               </TableHeader>
               {/* Droppable Area for Headlines */}
@@ -426,10 +440,11 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
                         headlines.map((headline, index) => (
                             <Draggable key={headline.id} draggableId={headline.id} index={index}>
                                 {(providedDraggable, snapshot) => (
+                                    // Apply Draggable props and ref to the TableRow
                                     <TableRow
                                         ref={providedDraggable.innerRef}
                                         {...providedDraggable.draggableProps}
-                                        key={headline.id}
+                                        // No key needed here as Draggable provides it
                                         data-state={selectedIds.has(headline.id) ? 'selected' : undefined}
                                         className={cn(
                                            "group", // group class for hover states
@@ -439,6 +454,7 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
                                         )}
                                         style={{ ...providedDraggable.draggableProps.style }} // Apply styles from dnd
                                     >
+                                        {/* Checkbox Cell */}
                                         <TableCell padding="checkbox" className="sticky left-0 bg-inherit z-10">
                                             <Checkbox
                                                 checked={selectedIds.has(headline.id)}
@@ -447,25 +463,32 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
                                                 className="translate-y-[2px]"
                                             />
                                         </TableCell>
+                                         {/* Drag Handle Cell */}
                                          <TableCell
                                             padding="none"
                                             className="w-10 touch-none cursor-grab sticky left-10 bg-inherit z-10"
-                                            {...providedDraggable.dragHandleProps} // Apply drag handle props
+                                            {...providedDraggable.dragHandleProps} // Apply drag handle props to this cell
                                          >
                                             <GripVertical className="h-5 w-5 text-muted-foreground mx-auto" />
                                         </TableCell>
+                                    {/* Title Cell */}
                                     <TableCell className="font-medium">
                                         <div className="font-semibold">{headline.mainTitle}</div>
                                         {headline.subtitle && <div className="text-sm text-muted-foreground mt-1">{headline.subtitle}</div>}
                                     </TableCell>
+                                    {/* Category Cell */}
                                     <TableCell className="hidden md:table-cell text-sm">{getCategoryNames(headline.categories)}</TableCell>
+                                    {/* State Cell */}
                                     <TableCell>
                                         <Badge variant={getBadgeVariant(headline.state)} className="whitespace-nowrap">{t(headline.state.toLowerCase().replace(' ', ''))}</Badge>
                                     </TableCell>
+                                    {/* Priority Cell */}
                                     <TableCell className="hidden sm:table-cell">
                                         <Badge variant={getPriorityBadgeVariant(headline.priority)} className="whitespace-nowrap">{t(headline.priority.toLowerCase())}</Badge>
                                     </TableCell>
+                                    {/* Publish Date Cell */}
                                     <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">{format(headline.publishDate, 'PPp')}</TableCell>
+                                    {/* Actions Cell */}
                                     <TableCell className="w-16 sticky right-0 bg-inherit z-10">
                                         <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -494,6 +517,7 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
                             </Draggable>
                         ))
                         )}
+                        {/* Placeholder for empty space while dragging */}
                         {provided.placeholder}
                     </TableBody>
                 )}
@@ -517,8 +541,9 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
           isBreaking={editingHeadline.isBreaking} // Pass breaking status if editing
         />
       )}
-      {/* Headline Editor Modal (Create Mode) */}
-       {isModalOpen && !editingHeadline && (
+      {/* Headline Editor Modal (Create Mode) - Triggered via CreateHeadlineButton, not here directly */}
+       {/* Remove this block if CreateHeadlineButton handles opening the modal */}
+       {/* {isModalOpen && !editingHeadline && (
           <HeadlineEditorModal
             isOpen={isModalOpen}
             onClose={handleModalClose}
@@ -526,7 +551,7 @@ export function HeadlineTable({ headlines: initialHeadlines, categories, current
             categories={categories}
             isBreaking={isBreakingNewsList} // Default based on the list type
           />
-      )}
+      )} */}
     </>
   );
 }
